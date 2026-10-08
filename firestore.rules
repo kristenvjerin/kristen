@@ -1,0 +1,93 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(role) {
+      return isAuthenticated() && getUserData().role == role;
+    }
+
+    function isAdmin() {
+      return hasRole('admin');
+    }
+
+    function isSupervisor() {
+      return hasRole('supervisor') || isAdmin();
+    }
+
+    function isWorker() {
+      return hasRole('worker') || isSupervisor();
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']));
+      allow write: if isAdmin();
+    }
+
+    // Reports Collection
+    match /reports/{reportId} {
+      // Any authenticated user or public map read for non-sensitive fields
+      allow read: if true;
+
+      // Citizens can create reports with initial status SUBMITTED
+      allow create: if isAuthenticated() &&
+        request.resource.data.citizenId == request.auth.uid &&
+        request.resource.data.status == 'SUBMITTED';
+
+      // Citizens can only verify or reopen their own reports
+      allow update: if isAuthenticated() && (
+        // Citizen verifying or reopening
+        (resource.data.citizenId == request.auth.uid &&
+          (request.resource.data.status == 'RESOLVED' || request.resource.data.status == 'REOPENED')) ||
+        // Field worker updating progress or resolution
+        (isWorker() &&
+          (request.resource.data.status == 'IN_PROGRESS' || request.resource.data.status == 'RESOLVED_PENDING_CONFIRMATION')) ||
+        // Supervisors & admins can verify, assign, reject
+        isSupervisor()
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Evidence Collection
+    match /evidence/{evidenceId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isSupervisor();
+    }
+
+    // Hotspots Collection
+    match /hotspots/{hotspotId} {
+      allow read: if true;
+      allow write: if isSupervisor();
+    }
+
+    // Zones Collection
+    match /zones/{zoneId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Audit Logs Collection (Append-only)
+    match /auditLogs/{logId} {
+      allow read: if isSupervisor();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Immutable audit log
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "CleanCity - Smart Waste Reporting & Intelligence Platform",
+  "description": "Citizen-powered civic waste management platform connecting reporting, AI verification, geospatial intelligence, work assignment, and hotspot analytics.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
