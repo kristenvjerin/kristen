@@ -1,20 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AnalyticsSummary, WasteReport } from '../types';
 import { getCategoryInfo } from '../utils/categories';
 import {
   Camera,
   MapPin,
   CheckCircle2,
-  Sparkles,
   ArrowRight,
   ShieldCheck,
-  TrendingUp,
-  Clock,
-  ThumbsUp,
-  AlertTriangle,
-  Flame,
   Check,
-  Award,
+  ChevronDown,
+  ChevronUp,
+  Users,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface LandingPageProps {
@@ -32,336 +29,372 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onSelectReport,
   onCommunityVote,
 }) => {
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
+  const [votedFeedbackId, setVotedFeedbackId] = useState<string | null>(null);
+
+  const faqs = [
+    {
+      q: 'What happens after I submit a waste report?',
+      a: 'Your report enters the municipal intake queue. The location is verified, image analysis suggests hazard category and severity, and a supervisor assigns a cleanup team. Once cleared, the team uploads a photo showing the cleared site.',
+    },
+    {
+      q: 'How is my location used and is my exact address private?',
+      a: 'GPS coordinates are used solely to direct sanitation crews to the site. On the public community map, locations are approximated (for example, "Near Gandhi Road") to preserve privacy.',
+    },
+    {
+      q: 'Can I report waste without creating an account?',
+      a: 'Yes. CleanSpot does not require registration. You receive a tracking code (such as CS-2026-000184) to follow progress at any time.',
+    },
+    {
+      q: 'How are reports verified and prioritized?',
+      a: 'Reports are prioritized based on hazard severity, public obstruction, blocked drainage, elapsed time, and confirmations from nearby residents.',
+    },
+    {
+      q: 'How do cleanup teams receive and complete tasks?',
+      a: 'Sanitation crews receive work orders with coordinates, photo evidence, and location notes. After cleanup, they submit a photo of the cleared area before marking the task resolved.',
+    },
+    {
+      q: 'What are recurring waste hotspots?',
+      a: 'Locations with repeated dumping complaints are flagged as hotspots so municipal planners can consider preventive infrastructure, such as additional bins or scheduled collections.',
+    },
+  ];
+
+  const handleVoteWithFeedback = (
+    reportId: string,
+    vote: 'still_there' | 'cleaned' | 'worsened'
+  ) => {
+    onCommunityVote(reportId, vote);
+    setVotedFeedbackId(reportId);
+    setTimeout(() => setVotedFeedbackId(null), 3000);
+  };
+
   return (
-    <div className="space-y-16 pb-12">
-      {/* HERO SECTION */}
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 p-6 sm:p-12 text-white shadow-xl border border-emerald-900/30">
-        <div className="relative z-10 max-w-3xl space-y-5">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-xs font-bold">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span>AI-Assisted Civic Waste Reporting Platform</span>
-          </div>
-
-          <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white leading-tight">
-            See Waste. <br />
-            Report It. <br />
-            <span className="text-emerald-400">Get It Cleaned.</span>
-          </h1>
-
-          <p className="text-sm sm:text-base text-emerald-100/80 max-w-xl leading-relaxed">
-            Help make your neighborhood cleaner by reporting overflowing bins, illegal dumping, and public waste in seconds. AI categorizes the hazard, and authorities track it to verified resolution.
-          </p>
-
-          {/* Action CTAs */}
-          <div className="pt-2 flex flex-wrap items-center gap-3 sm:gap-4">
-            <button
-              onClick={() => onNavigateTab('report')}
-              className="px-6 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm rounded-2xl shadow-lg shadow-emerald-500/25 transition-all flex items-center gap-2 cursor-pointer hover:scale-102"
-            >
-              <Camera className="w-5 h-5 text-slate-950" />
-              <span>Report Waste (Under 30s)</span>
-            </button>
-
-            <button
-              onClick={() => onNavigateTab('map')}
-              className="px-5 py-3.5 bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-sm rounded-2xl transition-all flex items-center gap-2 cursor-pointer hover:scale-102"
-            >
-              <MapPin className="w-4 h-4 text-emerald-300" />
-              <span>Explore Waste Map</span>
-            </button>
-          </div>
-
-          {/* Trust Statement */}
-          <div className="pt-4 flex items-center gap-2 text-xs text-emerald-200/70 font-medium">
-            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Every report includes GPS location, photo evidence, and anti-false closure verification.</span>
-          </div>
-        </div>
-
-        {/* Ambient Map Silhouette / Visual card */}
-        <div className="hidden lg:block absolute right-8 top-12 bottom-12 w-96 rounded-2xl bg-white/5 border border-white/10 p-5 backdrop-blur-md shadow-2xl">
-          <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
-            <span className="text-xs font-bold text-emerald-300">Live Incident Stream</span>
-            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono">
-              GPS Verified
+    <div className="space-y-12 pb-12">
+      {/* 1. HERO SECTION — Calm, Human, Restrained Civic Presentation */}
+      <section className="bg-white rounded-[14px] border border-[#E2E8E4] p-6 sm:p-10 lg:p-12">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          <div className="lg:col-span-7 space-y-4">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[#176B45]">
+              Gamified Civic Cleanliness Platform
             </span>
+
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-[#17201B] leading-tight">
+              Report waste. Earn points. Improve your area.
+            </h1>
+
+            <p className="text-sm sm:text-base text-[#657169] leading-relaxed max-w-xl">
+              Turn everyday civic contributions into verified real-world impact. Capture waste, earn Civic Points, unlock achievement badges, and help municipal crews keep your neighborhood clean.
+            </p>
+
+            {/* Core Idea Mission Strip */}
+            <div className="p-3 bg-[#F7F9F7] rounded-[10px] border border-[#E2E8E4] text-[11px] font-medium text-[#17201B] flex flex-wrap items-center gap-1.5 leading-snug">
+              <span className="font-bold text-[#176B45]">Mission:</span>
+              <span>See Waste</span>
+              <span className="text-slate-300">→</span>
+              <span>Take Photo</span>
+              <span className="text-slate-300">→</span>
+              <span>Report Location</span>
+              <span className="text-slate-300">→</span>
+              <span>Verify</span>
+              <span className="text-slate-300">→</span>
+              <span className="font-bold text-[#176B45]">Earn Points (+85)</span>
+              <span className="text-slate-300">→</span>
+              <span>Track Cleanup</span>
+            </div>
+
+            <div className="pt-2 flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => onNavigateTab('report')}
+                className="touch-target px-5 py-2.5 bg-[#176B45] hover:bg-[#0E4D32] text-white font-semibold text-sm rounded-[8px] transition-colors flex items-center gap-2 cursor-pointer shadow-xs"
+              >
+                <Camera className="w-4 h-4" />
+                <span>Report waste & earn points</span>
+              </button>
+
+              <button
+                onClick={() => onNavigateTab('profile')}
+                className="touch-target px-5 py-2.5 bg-[#E8F5EE] hover:bg-[#D5EEDB] text-[#0E4D32] border border-[#CBE5D7] font-semibold text-sm rounded-[8px] transition-colors flex items-center gap-2 cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4 text-[#176B45]" />
+                <span>View civic score</span>
+              </button>
+
+              <button
+                onClick={() => onNavigateTab('map')}
+                className="touch-target px-5 py-2.5 bg-[#F7F9F7] hover:bg-slate-100 border border-[#E2E8E4] text-[#17201B] font-semibold text-sm rounded-[8px] transition-colors flex items-center gap-2 cursor-pointer"
+              >
+                <MapPin className="w-4 h-4 text-[#176B45]" />
+                <span>Community map</span>
+              </button>
+            </div>
+
+            <div className="pt-1 flex items-center gap-2 text-xs text-[#8B9690]">
+              <ShieldCheck className="w-4 h-4 text-[#176B45] shrink-0" />
+              <span>Location coordinates and photo evidence included with each report.</span>
+            </div>
           </div>
 
-          <div className="space-y-3">
-            {reports.slice(0, 3).map((r) => {
-              const catInfo = getCategoryInfo(r.category);
-              return (
-                <div
-                  key={r.id}
-                  onClick={() => onSelectReport(r)}
-                  className="p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 cursor-pointer transition-all space-y-1.5"
-                >
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-bold text-white">{r.id}</span>
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
-                        r.status === 'RESOLVED'
-                          ? 'bg-emerald-500/20 text-emerald-300'
-                          : 'bg-amber-500/20 text-amber-300'
-                      }`}
-                    >
-                      {r.status.replace(/_/g, ' ')}
-                    </span>
+          {/* Product Preview Card */}
+          <div className="lg:col-span-5 bg-[#F7F9F7] rounded-[12px] border border-[#E2E8E4] p-4 space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-[#E2E8E4] text-xs">
+              <span className="font-semibold text-[#17201B]">Recent reports in area</span>
+              <button
+                onClick={() => onNavigateTab('map')}
+                className="text-[#176B45] font-medium hover:text-[#0E4D32] flex items-center gap-1 cursor-pointer"
+              >
+                View all <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {reports.slice(0, 3).map((r) => {
+                const cat = getCategoryInfo(r.category);
+                return (
+                  <div
+                    key={r.id}
+                    onClick={() => onSelectReport(r)}
+                    className="p-3 rounded-[8px] bg-white border border-[#E2E8E4] hover:border-slate-300 cursor-pointer transition-colors space-y-1"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-mono font-bold text-[#17201B]">{r.id}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-[4px] text-[10px] font-semibold uppercase ${
+                          r.status === 'RESOLVED'
+                            ? 'bg-[#E8F5EE] text-[#0E4D32]'
+                            : 'bg-amber-50 text-amber-800'
+                        }`}
+                      >
+                        {r.status.replace(/_/g, ' ').toLowerCase()}
+                      </span>
+                    </div>
+                    <p className="text-xs font-medium text-[#17201B] truncate">{cat.label}</p>
+                    <p className="text-[11px] text-[#657169] truncate flex items-center gap-1">
+                      <MapPin className="w-3 h-3 shrink-0 text-[#8B9690]" />
+                      <span>{r.location.approximateLocation || r.location.formattedAddress}</span>
+                    </p>
                   </div>
-                  <p className="text-xs font-semibold text-emerald-100 truncate">{catInfo.label}</p>
-                  <p className="text-[10px] text-slate-400 truncate">📍 {r.location.formattedAddress}</p>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* VALUE PROPOSITION (3 Feature Cards) */}
-      <section className="space-y-4">
-        <div className="text-center max-w-xl mx-auto space-y-1">
-          <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-            Why CleanSpot Works
-          </span>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-            Designed for Citizens. Built for Municipal Action.
+      {/* 2. REAL METRICS HIERARCHY — Restrained, Factual Context */}
+      <section className="bg-white rounded-[14px] border border-[#E2E8E4] p-6 sm:p-8 space-y-4">
+        <div>
+          <h2 className="text-base sm:text-lg font-bold text-[#17201B]">
+            Activity summary
           </h2>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-3">
-          <div className="p-6 bg-white rounded-3xl border border-slate-200 shadow-xs hover:border-emerald-300 hover:shadow-md transition-all space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-              <Camera className="w-6 h-6" />
-            </div>
-            <h3 className="font-extrabold text-slate-900 text-base">Report in Seconds</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Upload a photograph and pinpoint the location on an interactive map. Gemini Multimodal AI classifies the waste and estimates severity automatically.
-            </p>
-          </div>
-
-          <div className="p-6 bg-white rounded-3xl border border-slate-200 shadow-xs hover:border-teal-300 hover:shadow-md transition-all space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
-              <MapPin className="w-6 h-6" />
-            </div>
-            <h3 className="font-extrabold text-slate-900 text-base">Map the Problem</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Explore public waste reports across your city. Nearby citizens can confirm if the garbage is still there, preventing duplicate work and verifying urgency.
-            </p>
-          </div>
-
-          <div className="p-6 bg-white rounded-3xl border border-slate-200 shadow-xs hover:border-blue-300 hover:shadow-md transition-all space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
-              <CheckCircle2 className="w-6 h-6" />
-            </div>
-            <h3 className="font-extrabold text-slate-900 text-base">Track the Solution</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Follow your report from assignment to resolution. Review side-by-side Before/After evidence photos uploaded by cleanup crews before marking it closed.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* HOW IT WORKS SECTION */}
-      <section className="bg-slate-900 text-white rounded-3xl p-6 sm:p-10 space-y-8 shadow-lg">
-        <div className="text-center max-w-xl mx-auto space-y-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/80 px-3 py-1 rounded-full border border-emerald-800">
-            Lifecycle Workflow
-          </span>
-          <h2 className="text-2xl sm:text-3xl font-black tracking-tight">How CleanSpot Works</h2>
-          <p className="text-xs text-slate-400">
-            A transparent closed-loop from citizen discovery to verified municipal remediation
+          <p className="text-xs text-[#657169]">
+            Current operational counts across municipal wards
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
-            <span className="font-mono text-2xl font-black text-emerald-400">01</span>
-            <h4 className="font-bold text-sm text-white">Spot</h4>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Encounter overflowing bins, illegal fly-tipping, or chokes.
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-1">
+          <div className="p-4 rounded-[10px] bg-[#F7F9F7] border border-[#E2E8E4]">
+            <span className="text-xs font-medium text-[#657169] block">Total reports</span>
+            <p className="text-2xl sm:text-3xl font-bold text-[#17201B] mt-1">{analytics.totalReports}</p>
+            <span className="text-[11px] text-[#657169] block mt-0.5">Recorded in database</span>
+          </div>
+
+          <div className="p-4 rounded-[10px] bg-[#F7F9F7] border border-[#E2E8E4]">
+            <span className="text-xs font-medium text-[#657169] block">Resolved</span>
+            <p className="text-2xl sm:text-3xl font-bold text-[#176B45] mt-1">{analytics.resolvedReports}</p>
+            <span className="text-[11px] text-[#657169] block mt-0.5">Verified with photo</span>
+          </div>
+
+          <div className="p-4 rounded-[10px] bg-[#F7F9F7] border border-[#E2E8E4]">
+            <span className="text-xs font-medium text-[#657169] block">Average response time</span>
+            <p className="text-2xl sm:text-3xl font-bold text-[#17201B] mt-1">{analytics.averageResolutionHours}h</p>
+            <span className="text-[11px] text-[#657169] block mt-0.5">{analytics.slaComplianceRate}% within target</span>
+          </div>
+
+          <div className="p-4 rounded-[10px] bg-[#F7F9F7] border border-[#E2E8E4]">
+            <span className="text-xs font-medium text-[#657169] block">Active hotspots</span>
+            <p className="text-2xl sm:text-3xl font-bold text-[#D64545] mt-1">{analytics.hotspotsCount}</p>
+            <span className="text-[11px] text-[#657169] block mt-0.5">Locations under review</span>
+          </div>
+        </div>
+      </section>
+
+      {/* 3. HOW IT WORKS — Conventional 5-step operational flow */}
+      <section id="how-it-works" className="space-y-4">
+        <div>
+          <h2 className="text-xl font-bold text-[#17201B]">
+            How it works
+          </h2>
+          <p className="text-xs sm:text-sm text-[#657169]">
+            From citizen report to field cleanup and closure
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="p-4 rounded-[12px] bg-white border border-[#E2E8E4] space-y-1.5">
+            <span className="font-mono text-lg font-bold text-[#176B45]">01</span>
+            <h3 className="font-semibold text-sm text-[#17201B]">Spot</h3>
+            <p className="text-xs text-[#657169] leading-relaxed">
+              Notice overflowing bins, roadside trash, plastic debris, or blocked drains.
             </p>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
-            <span className="font-mono text-2xl font-black text-emerald-400">02</span>
-            <h4 className="font-bold text-sm text-white">Report</h4>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Upload photo, let AI classify hazard, confirm pin in under 30s.
+          <div className="p-4 rounded-[12px] bg-white border border-[#E2E8E4] space-y-1.5">
+            <span className="font-mono text-lg font-bold text-[#176B45]">02</span>
+            <h3 className="font-semibold text-sm text-[#17201B]">Report</h3>
+            <p className="text-xs text-[#657169] leading-relaxed">
+              Take a photo, mark the location on the map, and submit the report.
             </p>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
-            <span className="font-mono text-2xl font-black text-emerald-400">03</span>
-            <h4 className="font-bold text-sm text-white">Verify</h4>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Authorities review report, group duplicates, and assign SLA priority.
+          <div className="p-4 rounded-[12px] bg-white border border-[#E2E8E4] space-y-1.5">
+            <span className="font-mono text-lg font-bold text-[#176B45]">03</span>
+            <h3 className="font-semibold text-sm text-[#17201B]">Triage</h3>
+            <p className="text-xs text-[#657169] leading-relaxed">
+              Supervisors review the report, check for duplicates, and set priority.
             </p>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
-            <span className="font-mono text-2xl font-black text-emerald-400">04</span>
-            <h4 className="font-bold text-sm text-white">Clean</h4>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Sanitation teams clear the site and upload proof photos.
+          <div className="p-4 rounded-[12px] bg-white border border-[#E2E8E4] space-y-1.5">
+            <span className="font-mono text-lg font-bold text-[#176B45]">04</span>
+            <h3 className="font-semibold text-sm text-[#17201B]">Clean</h3>
+            <p className="text-xs text-[#657169] leading-relaxed">
+              Sanitation crews clear the site and take a completion photo.
             </p>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
-            <span className="font-mono text-2xl font-black text-emerald-400">05</span>
-            <h4 className="font-bold text-sm text-white">Resolve</h4>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Citizens audit Before/After photos to guarantee true closure.
+          <div className="p-4 rounded-[12px] bg-white border border-[#E2E8E4] space-y-1.5">
+            <span className="font-mono text-lg font-bold text-[#176B45]">05</span>
+            <h3 className="font-semibold text-sm text-[#17201B]">Resolve</h3>
+            <p className="text-xs text-[#657169] leading-relaxed">
+              Citizens inspect the photo evidence and confirm the location is clean.
             </p>
           </div>
         </div>
       </section>
 
-      {/* DYNAMIC IMPACT SECTION */}
-      <section className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                Civic Impact Snapshot
-              </h2>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-                Live Data
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Real-time operational statistics powered by citizen reports and municipal response
-            </p>
-          </div>
-
-          <button
-            onClick={() => onNavigateTab('track')}
-            className="text-xs text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 cursor-pointer"
-          >
-            Track Existing Report <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-100">
-            <span className="text-xs font-semibold text-emerald-800">Total Reports</span>
-            <p className="text-3xl font-black text-slate-900 mt-1">{analytics.totalReports}</p>
-            <span className="text-[11px] text-emerald-700 font-medium">Logged & geocoded</span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-teal-50/60 border border-teal-100">
-            <span className="text-xs font-semibold text-teal-800">Issues Resolved</span>
-            <p className="text-3xl font-black text-emerald-600 mt-1">{analytics.resolvedReports}</p>
-            <span className="text-[11px] text-teal-700 font-medium">Verified clean</span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-purple-50/60 border border-purple-100">
-            <span className="text-xs font-semibold text-purple-800">Active Hotspots</span>
-            <p className="text-3xl font-black text-purple-600 mt-1">{analytics.hotspotsCount}</p>
-            <span className="text-[11px] text-purple-700 font-medium">Under preventive care</span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-blue-50/60 border border-blue-100">
-            <span className="text-xs font-semibold text-blue-800">Avg Resolution Time</span>
-            <p className="text-3xl font-black text-slate-900 mt-1">{analytics.averageResolutionHours}h</p>
-            <span className="text-[11px] text-blue-700 font-medium">92% within SLA target</span>
-          </div>
-        </div>
-      </section>
-
-      {/* RECENT COMMUNITY INCIDENTS WITH CONFIRMATION BUTTONS */}
+      {/* 4. RECENT REPORTS & COMMUNITY CONFIRMATION */}
       <section className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h3 className="font-extrabold text-slate-900 text-lg">Active Reports in Your Community</h3>
-            <p className="text-xs text-slate-500">
-              Confirm whether the garbage is still present to help authorities prioritize cleanup
+            <h2 className="text-xl font-bold text-[#17201B]">
+              Community reports
+            </h2>
+            <p className="text-xs text-[#657169]">
+              Confirm whether reported waste is still present to help dispatch crews
             </p>
           </div>
           <button
             onClick={() => onNavigateTab('map')}
-            className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
+            className="text-xs font-semibold text-[#176B45] hover:text-[#0E4D32] flex items-center gap-1 cursor-pointer self-start sm:self-auto"
           >
-            View Full Map <ArrowRight className="w-3.5 h-3.5" />
+            Explore waste map <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        {/* Feedback alert banner */}
+        {votedFeedbackId && (
+          <div className="p-3 bg-[#E8F5EE] border border-[#3FA66B] rounded-[8px] text-xs text-[#0E4D32] flex items-center gap-2">
+            <Check className="w-4 h-4 text-[#176B45]" />
+            <span>Thank you. Your confirmation helps prioritize cleanup.</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {reports.slice(0, 3).map((r) => {
-            const catInfo = getCategoryInfo(r.category);
+            const cat = getCategoryInfo(r.category);
             const votes = r.communityVotes || { stillThere: 0, cleaned: 0, worsened: 0 };
 
             return (
               <div
                 key={r.id}
-                className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs hover:border-emerald-300 transition-all flex flex-col justify-between"
+                className="bg-white rounded-[12px] border border-[#E2E8E4] overflow-hidden flex flex-col justify-between"
               >
                 <div>
-                  <div className="aspect-video w-full bg-slate-100 relative">
+                  <div className="aspect-video w-full bg-[#F7F9F7] relative">
                     <img
                       src={r.imageUrls[0]}
-                      alt={catInfo.label}
+                      alt={cat.label}
                       className="w-full h-full object-cover"
                     />
-                    <div className="absolute top-3 left-3">
+                    <div className="absolute top-2.5 left-2.5">
                       <span
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                        className={`px-2 py-0.5 rounded-[4px] text-[10px] font-bold uppercase ${
                           r.severity === 'critical'
-                            ? 'bg-red-600 text-white'
+                            ? 'bg-[#D64545] text-white'
                             : r.severity === 'high'
-                            ? 'bg-orange-500 text-white'
-                            : 'bg-amber-500 text-white'
+                            ? 'bg-[#E7A52B] text-slate-900'
+                            : 'bg-[#176B45] text-white'
                         }`}
                       >
                         {r.severity}
                       </span>
                     </div>
-                    <div className="absolute top-3 right-3">
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-900/80 text-white backdrop-blur-xs">
-                        {r.status.replace(/_/g, ' ')}
+                    <div className="absolute top-2.5 right-2.5">
+                      <span className="px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-[#17201B]/80 text-white">
+                        {r.status.replace(/_/g, ' ').toLowerCase()}
                       </span>
                     </div>
                   </div>
 
-                  <div className="p-4 space-y-2">
+                  <div className="p-4 space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-mono font-bold text-slate-900">{r.id}</span>
-                      <span className="text-[11px] text-slate-400">
+                      <span className="font-mono font-bold text-[#17201B]">{r.id}</span>
+                      <span className="text-[11px] text-[#8B9690]">
                         {new Date(r.createdAt).toLocaleDateString()}
                       </span>
                     </div>
-                    <h4 className="font-bold text-slate-900 text-sm">{catInfo.label}</h4>
-                    <p className="text-xs text-slate-600 line-clamp-2">{r.description}</p>
-                    <p className="text-[11px] text-slate-500">📍 {r.location.formattedAddress}</p>
+                    <h3 className="font-semibold text-sm text-[#17201B]">{cat.label}</h3>
+                    <p className="text-xs text-[#657169] line-clamp-2">{r.description}</p>
+                    <p className="text-[11px] text-[#657169] flex items-center gap-1">
+                      <MapPin className="w-3 h-3 shrink-0 text-[#8B9690]" />
+                      <span className="truncate">{r.location.approximateLocation || r.location.formattedAddress}</span>
+                    </p>
                   </div>
                 </div>
 
-                {/* Community Confirmation Section */}
-                <div className="p-4 pt-2 border-t border-slate-100 bg-slate-50/50 space-y-2">
-                  <span className="text-[11px] font-bold text-slate-700 block">
-                    Is this waste still here?
-                  </span>
+                {/* Community confirmation buttons */}
+                <div className="p-3 border-t border-[#E2E8E4] bg-[#F7F9F7] space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-[#17201B]">
+                    <span className="font-medium">Is this waste still present?</span>
+                    {(votes.stillThere > 0 || votes.worsened > 0) && (
+                      <span className="text-[#176B45] flex items-center gap-1 font-medium">
+                        <Users className="w-3 h-3" />
+                        {votes.stillThere + votes.worsened} confirmations
+                      </span>
+                    )}
+                  </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => onCommunityVote(r.id, 'still_there')}
-                      className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                      onClick={() => handleVoteWithFeedback(r.id, 'still_there')}
+                      className={`flex-1 py-1.5 px-2 rounded-[6px] text-xs font-medium transition-colors flex items-center justify-center gap-1 cursor-pointer ${
                         votes.userVoted === 'still_there'
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                          ? 'bg-[#176B45] text-white'
+                          : 'bg-white border border-[#E2E8E4] text-[#17201B] hover:bg-slate-50'
                       }`}
                     >
-                      <ThumbsUp className="w-3.5 h-3.5" />
-                      <span>Still There ({votes.stillThere})</span>
+                      <span>Still there ({votes.stillThere})</span>
                     </button>
                     <button
-                      onClick={() => onCommunityVote(r.id, 'cleaned')}
-                      className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                      onClick={() => handleVoteWithFeedback(r.id, 'cleaned')}
+                      className={`flex-1 py-1.5 px-2 rounded-[6px] text-xs font-medium transition-colors flex items-center justify-center gap-1 cursor-pointer ${
                         votes.userVoted === 'cleaned'
-                          ? 'bg-blue-600 text-white shadow-xs'
-                          : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                          ? 'bg-[#176B45] text-white'
+                          : 'bg-white border border-[#E2E8E4] text-[#17201B] hover:bg-slate-50'
                       }`}
                     >
-                      <Check className="w-3.5 h-3.5" />
                       <span>Cleaned ({votes.cleaned})</span>
+                    </button>
+                    <button
+                      onClick={() => handleVoteWithFeedback(r.id, 'worsened')}
+                      className={`py-1.5 px-2 rounded-[6px] text-xs font-medium transition-colors flex items-center justify-center gap-1 cursor-pointer ${
+                        votes.userVoted === 'worsened'
+                          ? 'bg-[#D64545] text-white'
+                          : 'bg-white border border-[#E2E8E4] text-[#D64545] hover:bg-red-50'
+                      }`}
+                      title="Situation has worsened"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>Worse</span>
                     </button>
                   </div>
                 </div>
@@ -369,6 +402,58 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             );
           })}
         </div>
+      </section>
+
+      {/* 5. FREQUENTLY ASKED QUESTIONS */}
+      <section className="bg-white rounded-[14px] border border-[#E2E8E4] p-6 sm:p-8 space-y-4">
+        <div>
+          <h2 className="text-xl font-bold text-[#17201B]">Frequently asked questions</h2>
+          <p className="text-xs text-[#657169]">
+            Common questions regarding reporting, privacy, and cleanup
+          </p>
+        </div>
+
+        <div className="divide-y divide-[#E2E8E4]">
+          {faqs.map((faq, idx) => (
+            <div key={idx} className="py-3.5">
+              <button
+                onClick={() => setOpenFaqIndex(openFaqIndex === idx ? null : idx)}
+                className="w-full flex items-center justify-between text-left font-medium text-sm sm:text-base text-[#17201B] hover:text-[#176B45] cursor-pointer"
+              >
+                <span>{faq.q}</span>
+                {openFaqIndex === idx ? (
+                  <ChevronUp className="w-4 h-4 text-[#176B45] shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-[#8B9690] shrink-0" />
+                )}
+              </button>
+              {openFaqIndex === idx && (
+                <p className="pt-2 text-xs sm:text-sm text-[#657169] leading-relaxed">
+                  {faq.a}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 6. CALL TO ACTION — Restrained */}
+      <section className="rounded-[12px] bg-[#176B45] p-6 sm:p-8 text-white flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="space-y-1 text-center sm:text-left">
+          <h2 className="text-xl font-bold tracking-tight">
+            Report waste in your neighborhood
+          </h2>
+          <p className="text-xs sm:text-sm text-[#E8F5EE]/90">
+            Submit a photo and location to notify municipal cleanup teams.
+          </p>
+        </div>
+        <button
+          onClick={() => onNavigateTab('report')}
+          className="touch-target px-5 py-2.5 bg-white hover:bg-slate-50 text-[#0E4D32] font-semibold text-sm rounded-[8px] transition-colors flex items-center gap-2 cursor-pointer shrink-0"
+        >
+          <Camera className="w-4 h-4 text-[#176B45]" />
+          <span>Report waste</span>
+        </button>
       </section>
     </div>
   );

@@ -14,6 +14,16 @@ import {
   UserRole,
 } from '../types';
 import {
+  UserProfile,
+  PointTransaction,
+  LeaderboardUser,
+} from '../types/gamification';
+import {
+  DEMO_USER_PROFILE,
+  getLevelDetails,
+  POINT_RULES,
+} from '../utils/gamification';
+import {
   SEED_AUDIT_LOGS,
   SEED_NOTIFICATIONS,
   SEED_REPORTS,
@@ -31,6 +41,7 @@ const STORAGE_KEYS = {
   ZONES: 'cleanspot_zones_v2',
   NOTIFICATIONS: 'cleanspot_notifs_v2',
   AUDIT: 'cleanspot_audit_v2',
+  USER_PROFILE: 'cleanspot_user_profile_v2',
 };
 
 function getStored<T>(key: string, defaultValue: T): T {
@@ -303,6 +314,21 @@ export const ApiService = {
     reports[index] = report;
     setStored(STORAGE_KEYS.REPORTS, reports);
 
+    // Reward user with civic points for helping verify
+    const profile = this.getUserProfile();
+    profile.communityVerificationsCount = (profile.communityVerificationsCount || 0) + 1;
+    const mission2 = profile.dailyMissions.find((m) => m.id === 'dm-2');
+    if (mission2 && !mission2.isCompleted) {
+      mission2.isCompleted = true;
+    }
+    this.saveUserProfile(profile);
+    this.addCivicPoints(
+      POINT_RULES.HELP_VERIFY_REPORT,
+      `Helped verify community report (${reportId})`,
+      'community_verify',
+      reportId
+    );
+
     this.logAudit(citizenId, 'Community Member', 'citizen', 'COMMUNITY_CONFIRMATION', 'report', reportId, {
       voteType,
     });
@@ -349,12 +375,22 @@ export const ApiService = {
     });
 
     this.addNotification({
-      title: 'Report Verified',
-      message: `Your report ${id} has been verified and queued for dispatch.`,
+      title: 'Report Verified (+40 Civic Points)',
+      message: `Your report ${id} has been verified by municipal supervisors. +40 Civic Points awarded to your civic score!`,
       reportId: id,
       type: 'status_update',
       targetRole: 'citizen',
     });
+
+    const prof = this.getUserProfile();
+    prof.verifiedReportsCount = (prof.verifiedReportsCount || 0) + 1;
+    this.saveUserProfile(prof);
+    this.addCivicPoints(
+      POINT_RULES.AUTHORITY_VERIFIED,
+      `Report ${id} verified by authority`,
+      'authority_verified',
+      id
+    );
 
     return report;
   },
@@ -579,6 +615,17 @@ export const ApiService = {
         reason: feedback || 'Citizen verified: Waste completely removed',
         timestamp: new Date().toISOString(),
       });
+
+      // Award resolution bonus points to citizen
+      const prof = this.getUserProfile();
+      prof.resolvedIssuesCount = (prof.resolvedIssuesCount || 0) + 1;
+      this.saveUserProfile(prof);
+      this.addCivicPoints(
+        POINT_RULES.ISSUE_RESOLVED_BONUS,
+        `Issue resolution verified by citizen (${id})`,
+        'resolution_bonus',
+        id
+      );
     } else {
       report.status = 'REOPENED';
       report.reopenCount = (report.reopenCount || 0) + 1;
@@ -824,11 +871,230 @@ export const ApiService = {
     };
   },
 
+  // GAMIFICATION & CIVIC USER PROFILE
+  getUserProfile(): UserProfile {
+    const stored = getStored<UserProfile>(STORAGE_KEYS.USER_PROFILE, DEMO_USER_PROFILE);
+    if (!stored) {
+      setStored(STORAGE_KEYS.USER_PROFILE, DEMO_USER_PROFILE);
+      return DEMO_USER_PROFILE;
+    }
+    return stored;
+  },
+
+  saveUserProfile(profile: UserProfile): void {
+    setStored(STORAGE_KEYS.USER_PROFILE, profile);
+  },
+
+  addCivicPoints(
+    points: number,
+    reason: string,
+    category: PointTransaction['category'],
+    reportId?: string
+  ): { profile: UserProfile; levelUp: boolean; pointsAwarded: number } {
+    const profile = this.getUserProfile();
+    const oldLevel = profile.level;
+    const newTotalPoints = Math.max(0, profile.civicPoints + points);
+
+    const levelDetails = getLevelDetails(newTotalPoints);
+    const levelUp = levelDetails.level > oldLevel;
+
+    const transaction: PointTransaction = {
+      id: `pt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      date: 'Just now',
+      reason,
+      category,
+      points,
+      reportId,
+    };
+
+    profile.civicPoints = newTotalPoints;
+    profile.level = levelDetails.level;
+    profile.levelTitle = levelDetails.title;
+    profile.pointHistory = [transaction, ...profile.pointHistory.slice(0, 49)];
+
+    // Update streak if active
+    profile.lastActiveDate = new Date().toISOString();
+
+    // Check badges unlocking logic
+    this.updateBadgesProgress(profile);
+
+    this.saveUserProfile(profile);
+    return { profile, levelUp, pointsAwarded: points };
+  },
+
+  updateBadgesProgress(profile: UserProfile): void {
+    profile.badges = profile.badges.map((badge) => {
+      let currentProgress = badge.progress;
+      if (badge.id === 'badge-first-report') {
+        currentProgress = profile.reportsCount >= 1 ? 1 : 0;
+      } else if (badge.id === 'badge-waste-watcher') {
+        currentProgress = Math.min(badge.maxProgress, profile.verifiedReportsCount);
+      } else if (badge.id === 'badge-cleanspotter') {
+        currentProgress = Math.min(badge.maxProgress, profile.reportsCount);
+      } else if (badge.id === 'badge-hotspot-hunter') {
+        currentProgress = Math.min(badge.maxProgress, profile.hotspotsIdentifiedCount);
+      } else if (badge.id === 'badge-community-helper') {
+        currentProgress = Math.min(badge.maxProgress, profile.communityVerificationsCount);
+      } else if (badge.id === 'badge-cleanup-champion') {
+        currentProgress = Math.min(badge.maxProgress, profile.cleanupsParticipatedCount);
+      } else if (badge.id === 'badge-consistent-contributor') {
+        currentProgress = Math.min(badge.maxProgress, profile.currentStreak);
+      } else if (badge.id === 'badge-neighborhood-guardian') {
+        currentProgress = Math.min(badge.maxProgress, profile.verifiedReportsCount + profile.resolvedIssuesCount);
+      }
+
+      const isNowUnlocked = currentProgress >= badge.maxProgress;
+      const justUnlocked = isNowUnlocked && !badge.isUnlocked;
+
+      return {
+        ...badge,
+        progress: currentProgress,
+        isUnlocked: isNowUnlocked,
+        unlockedAt: justUnlocked ? new Date().toISOString() : badge.unlockedAt,
+      };
+    });
+  },
+
+  recordReportSubmitted(isHotspot: boolean = false): {
+    pointsAwarded: number;
+    breakdown: { base: number; photo: number; location: number; hotspot: number };
+    profile: UserProfile;
+    levelUp: boolean;
+  } {
+    const profile = this.getUserProfile();
+    profile.reportsCount += 1;
+    profile.dailyReportsCount = (profile.dailyReportsCount || 0) + 1;
+    if (isHotspot) {
+      profile.hotspotsIdentifiedCount = (profile.hotspotsIdentifiedCount || 0) + 1;
+    }
+
+    const breakdown = {
+      base: POINT_RULES.VALID_REPORT, // +50
+      photo: POINT_RULES.USEFUL_PHOTO, // +20
+      location: POINT_RULES.ACCURATE_LOCATION, // +15
+      hotspot: isHotspot ? POINT_RULES.HOTSPOT_REPORT : 0, // +50 if recurring hotspot
+    };
+
+    const total = breakdown.base + breakdown.photo + breakdown.location + breakdown.hotspot;
+
+    // Update challenges progress (e.g. Report 3 genuine waste problems)
+    profile.challenges = profile.challenges.map((c) => {
+      if (c.id === 'chal-1' && !c.isCompleted) {
+        const next = Math.min(c.target, c.current + 1);
+        return { ...c, current: next, isCompleted: next >= c.target };
+      }
+      if (c.id === 'chal-2' && isHotspot && !c.isCompleted) {
+        return { ...c, current: 1, isCompleted: true };
+      }
+      return c;
+    });
+
+    this.saveUserProfile(profile);
+
+    const result = this.addCivicPoints(
+      total,
+      isHotspot ? 'Valid waste report submitted (+Hotspot detected)' : 'Valid waste report submitted',
+      'report_submission'
+    );
+
+    return {
+      pointsAwarded: total,
+      breakdown,
+      profile: result.profile,
+      levelUp: result.levelUp,
+    };
+  },
+
+  checkAntiSpam(lat: number, lng: number, category: WasteCategory): {
+    isSpam: boolean;
+    reason?: string;
+    isDuplicate: boolean;
+    nearbyReportId?: string;
+    dailyLimitReached: boolean;
+  } {
+    const profile = this.getUserProfile();
+    // Daily limit check
+    if (profile.dailyReportsCount >= (profile.maxDailyReports || 5)) {
+      return {
+        isSpam: true,
+        reason: 'Daily contribution limit of 5 reports reached. This helps keep municipal verification manageable. Your report will be queued without additional civic points.',
+        isDuplicate: false,
+        dailyLimitReached: true,
+      };
+    }
+
+    // Nearby duplicate check within 30 meters
+    const reports = this.getReports();
+    for (const r of reports) {
+      if (r.status === 'RESOLVED' || r.status === 'REJECTED') continue;
+      // Rough distance in meters: 1 deg ~ 111,000 meters
+      const dLat = (r.location.latitude - lat) * 111000;
+      const dLng = (r.location.longitude - lng) * 111000 * Math.cos((lat * Math.PI) / 180);
+      const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+
+      if (dist < 30 && r.category === category) {
+        return {
+          isSpam: false,
+          isDuplicate: true,
+          nearbyReportId: r.id,
+          reason: `Similar report detected within 30m (${r.id}). This has been linked to the existing municipal ticket to prevent duplicate work orders. 0 additional points awarded.`,
+          dailyLimitReached: false,
+        };
+      }
+    }
+
+    return {
+      isSpam: false,
+      isDuplicate: false,
+      dailyLimitReached: false,
+    };
+  },
+
+  completeDailyMission(missionId: string): UserProfile {
+    const profile = this.getUserProfile();
+    const mission = profile.dailyMissions.find((m) => m.id === missionId);
+    if (!mission || mission.isCompleted) return profile;
+
+    mission.isCompleted = true;
+    this.saveUserProfile(profile);
+
+    this.addCivicPoints(
+      mission.rewardPoints,
+      `Daily mission completed: ${mission.title}`,
+      'daily_checkin'
+    );
+    return this.getUserProfile();
+  },
+
+  claimChallenge(challengeId: string): UserProfile {
+    const profile = this.getUserProfile();
+    const challenge = profile.challenges.find((c) => c.id === challengeId);
+    if (!challenge || !challenge.isCompleted || challenge.isClaimed) return profile;
+
+    challenge.isClaimed = true;
+    this.saveUserProfile(profile);
+
+    this.addCivicPoints(
+      challenge.rewardPoints,
+      `Weekly challenge reward: ${challenge.title}`,
+      'challenge_reward'
+    );
+    return this.getUserProfile();
+  },
+
+  toggleLeaderboardPrivacy(): UserProfile {
+    const profile = this.getUserProfile();
+    profile.isPublicOnLeaderboard = !profile.isPublicOnLeaderboard;
+    this.saveUserProfile(profile);
+    return profile;
+  },
+
   resetToDemo(): void {
     setStored(STORAGE_KEYS.REPORTS, SEED_REPORTS);
     setStored(STORAGE_KEYS.WORKERS, SEED_WORKERS);
     setStored(STORAGE_KEYS.ZONES, SEED_ZONES);
     setStored(STORAGE_KEYS.NOTIFICATIONS, SEED_NOTIFICATIONS);
     setStored(STORAGE_KEYS.AUDIT, SEED_AUDIT_LOGS);
+    setStored(STORAGE_KEYS.USER_PROFILE, DEMO_USER_PROFILE);
   },
 };

@@ -1,20 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { InAppNotification, UserRole } from '../types';
+import { ApiService } from '../services/api';
 import {
-  Sparkles,
   RotateCcw,
   Bell,
   Menu,
   X,
   MapPin,
   Camera,
-  Layers,
-  ShieldCheck,
-  Check,
   Building2,
   User,
   Truck,
   Trash2,
+  HelpCircle,
+  Award,
+  Trophy,
+  ShieldCheck,
+  Gamepad2,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -40,161 +42,243 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
+  const [fontDropdownOpen, setFontDropdownOpen] = useState(false);
+  const [gameFont, setGameFont] = useState<string>(() => {
+    return localStorage.getItem('cleanspot_game_font') || 'hud';
+  });
 
+  useEffect(() => {
+    const saved = localStorage.getItem('cleanspot_game_font') || 'hud';
+    document.body.setAttribute('data-game-font', saved);
+  }, []);
+
+  const changeGameFont = (fontKey: string) => {
+    setGameFont(fontKey);
+    localStorage.setItem('cleanspot_game_font', fontKey);
+    document.body.setAttribute('data-game-font', fontKey);
+    setFontDropdownOpen(false);
+  };
+
+  const profile = ApiService.getUserProfile();
   const unreadNotifs = notifications.filter((n) => !n.read);
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-emerald-900/10 shadow-xs">
+    <header className="sticky top-0 z-40 bg-white border-b border-[#E2E8E4]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-18">
-          {/* Logo & Branding */}
+        <div className="flex items-center justify-between h-16">
+          {/* Logo & Wordmark */}
           <div
             onClick={() => onNavigateTab('home')}
-            className="flex items-center gap-3 cursor-pointer group"
+            className="flex items-center gap-2.5 cursor-pointer"
           >
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-700 via-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-700/25 group-hover:scale-105 transition-transform">
-              <Trash2 className="w-6 h-6" />
+            <div className="w-9 h-9 rounded-[8px] bg-[#176B45] flex items-center justify-center text-white shadow-xs">
+              <Trash2 className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-2xl text-slate-900 tracking-tight">
-                  CleanSpot
-                </span>
-                <span className="hidden sm:inline-flex text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-                  Civic-Tech
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 font-medium -mt-0.5">
-                See it. Report it. Clean it.
+              <span className="font-display font-black text-lg sm:text-xl text-[#17201B] tracking-wider block leading-tight">
+                CleanSpot
+              </span>
+              <p className="text-[11px] text-[#657169] hidden sm:block tracking-wide">
+                Report waste. Earn points. Improve your area.
               </p>
             </div>
           </div>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden lg:flex items-center gap-1 xl:gap-2">
+          <nav className="hidden lg:flex items-center gap-1">
             <button
               onClick={() => onNavigateTab('home')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors cursor-pointer ${
                 activeNavTab === 'home'
-                  ? 'text-emerald-800 bg-emerald-50'
-                  : 'text-slate-600 hover:text-slate-950 hover:bg-slate-50'
+                  ? 'text-[#176B45] bg-[#E8F5EE] font-semibold'
+                  : 'text-[#657169] hover:text-[#17201B] hover:bg-slate-50'
               }`}
             >
               Home
             </button>
             <button
               onClick={() => onNavigateTab('report')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeNavTab === 'report'
-                  ? 'text-emerald-800 bg-emerald-50'
-                  : 'text-slate-600 hover:text-slate-950 hover:bg-slate-50'
+                  ? 'text-[#176B45] bg-[#E8F5EE] font-semibold'
+                  : 'text-[#657169] hover:text-[#17201B] hover:bg-slate-50'
               }`}
             >
-              <Camera className="w-3.5 h-3.5 text-emerald-600" />
-              Report Waste
+              <Camera className="w-3.5 h-3.5 text-[#176B45]" />
+              <span>Report waste</span>
+            </button>
+            <button
+              onClick={() => onNavigateTab('profile')}
+              className={`px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeNavTab === 'profile'
+                  ? 'text-[#176B45] bg-[#E8F5EE] font-semibold'
+                  : 'text-[#657169] hover:text-[#17201B] hover:bg-slate-50'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-[#176B45]" />
+              <span>Civic profile</span>
+            </button>
+            <button
+              onClick={() => onNavigateTab('leaderboard')}
+              className={`px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeNavTab === 'leaderboard'
+                  ? 'text-[#176B45] bg-[#E8F5EE] font-semibold'
+                  : 'text-[#657169] hover:text-[#17201B] hover:bg-slate-50'
+              }`}
+            >
+              <Trophy className="w-3.5 h-3.5 text-[#176B45]" />
+              <span>Leaders</span>
             </button>
             <button
               onClick={() => onNavigateTab('map')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeNavTab === 'map'
-                  ? 'text-emerald-800 bg-emerald-50'
-                  : 'text-slate-600 hover:text-slate-950 hover:bg-slate-50'
+                  ? 'text-[#176B45] bg-[#E8F5EE] font-semibold'
+                  : 'text-[#657169] hover:text-[#17201B] hover:bg-slate-50'
               }`}
             >
-              <MapPin className="w-3.5 h-3.5 text-teal-600" />
-              Waste Map
-            </button>
-            <button
-              onClick={() => onNavigateTab('how-it-works')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeNavTab === 'how-it-works'
-                  ? 'text-emerald-800 bg-emerald-50'
-                  : 'text-slate-600 hover:text-slate-950 hover:bg-slate-50'
-              }`}
-            >
-              How It Works
-            </button>
-            <button
-              onClick={() => onNavigateTab('track')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeNavTab === 'track'
-                  ? 'text-emerald-800 bg-emerald-50'
-                  : 'text-slate-600 hover:text-slate-950 hover:bg-slate-50'
-              }`}
-            >
-              Track Status
+              <MapPin className="w-3.5 h-3.5 text-[#176B45]" />
+              <span>Waste map</span>
             </button>
             <button
               onClick={() => onNavigateTab('admin')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeNavTab === 'admin'
-                  ? 'text-emerald-900 bg-emerald-100/70 font-bold'
-                  : 'text-slate-600 hover:text-slate-950 hover:bg-slate-50'
+                  ? 'text-[#176B45] bg-[#E8F5EE] font-semibold'
+                  : 'text-[#657169] hover:text-[#17201B] hover:bg-slate-50'
               }`}
             >
               <Building2 className="w-3.5 h-3.5 text-slate-700" />
-              Command Center
+              <span>Command center</span>
             </button>
           </nav>
 
-          {/* Right Controls: Role Switcher, Notifications, Demo CTA */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Guided Tour Button */}
+          {/* Right Controls: Civic Points Badge, Tour, Notifications, Role */}
+          <div className="flex items-center gap-2">
+            {/* Live Civic Points Badge */}
+            <button
+              onClick={() => onNavigateTab('profile')}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] bg-[#E8F5EE] hover:bg-[#D6EFE0] text-[#0E4D32] border border-[#CBE5D7] text-xs font-bold transition-colors cursor-pointer"
+              title="Your Civic Points & Level"
+            >
+              <Award className="w-3.5 h-3.5 text-[#176B45]" />
+              <span className="font-display tracking-wide font-extrabold">LVL {profile.level} • {profile.civicPoints.toLocaleString()} PTS</span>
+            </button>
+
+            {/* Game Font Switcher Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setFontDropdownOpen(!fontDropdownOpen)}
+                className="touch-target flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-[#F7F9F7] hover:bg-[#E8F5EE] border border-[#E2E8E4] text-[#17201B] text-xs font-semibold transition-colors cursor-pointer"
+                title="Select Game Font Style"
+              >
+                <Gamepad2 className="w-3.5 h-3.5 text-[#176B45]" />
+                <span className="hidden xl:inline uppercase font-display text-[10px] tracking-wider text-[#176B45]">
+                  {gameFont === 'hud' ? 'HUD' : gameFont === 'tactical' ? 'Tactical' : gameFont === 'arcade' ? 'Arcade' : 'Orbit'}
+                </span>
+              </button>
+
+              {fontDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-[12px] shadow-xl border border-[#E2E8E4] p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#657169] border-b border-[#E2E8E4] mb-1 font-display">
+                    Game Font Style
+                  </div>
+                  <button
+                    onClick={() => changeGameFont('hud')}
+                    className={`w-full text-left px-2.5 py-2 rounded-[6px] text-xs font-semibold flex items-center justify-between cursor-pointer transition-colors ${
+                      gameFont === 'hud' ? 'bg-[#E8F5EE] text-[#0E4D32]' : 'hover:bg-slate-50 text-[#17201B]'
+                    }`}
+                  >
+                    <div className="font-['Rajdhani'] font-bold text-sm">🎮 Modern HUD</div>
+                    <span className="text-[10px] text-[#657169]">Rajdhani</span>
+                  </button>
+                  <button
+                    onClick={() => changeGameFont('tactical')}
+                    className={`w-full text-left px-2.5 py-2 rounded-[6px] text-xs font-semibold flex items-center justify-between cursor-pointer transition-colors ${
+                      gameFont === 'tactical' ? 'bg-[#E8F5EE] text-[#0E4D32]' : 'hover:bg-slate-50 text-[#17201B]'
+                    }`}
+                  >
+                    <div className="font-['Chakra_Petch'] font-bold text-xs">🎯 Tactical Ops</div>
+                    <span className="text-[10px] text-[#657169]">Chakra</span>
+                  </button>
+                  <button
+                    onClick={() => changeGameFont('arcade')}
+                    className={`w-full text-left px-2.5 py-2 rounded-[6px] text-xs font-semibold flex items-center justify-between cursor-pointer transition-colors ${
+                      gameFont === 'arcade' ? 'bg-[#E8F5EE] text-[#0E4D32]' : 'hover:bg-slate-50 text-[#17201B]'
+                    }`}
+                  >
+                    <div className="font-['Silkscreen'] text-[10px]">👾 Retro Arcade</div>
+                    <span className="text-[10px] text-[#657169]">8-Bit</span>
+                  </button>
+                  <button
+                    onClick={() => changeGameFont('orbitron')}
+                    className={`w-full text-left px-2.5 py-2 rounded-[6px] text-xs font-semibold flex items-center justify-between cursor-pointer transition-colors ${
+                      gameFont === 'orbitron' ? 'bg-[#E8F5EE] text-[#0E4D32]' : 'hover:bg-slate-50 text-[#17201B]'
+                    }`}
+                  >
+                    <div className="font-['Orbitron'] text-xs font-bold">🚀 Cyber Orbit</div>
+                    <span className="text-[10px] text-[#657169]">Orbitron</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Demo Walkthrough Button */}
             <button
               onClick={onStartDemoTour}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
-              title="Launch Guided 3-Minute Hackathon Demo"
+              className="touch-target flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] bg-[#F7F9F7] hover:bg-slate-100 border border-[#E2E8E4] text-[#17201B] text-xs font-medium transition-colors cursor-pointer"
+              title="Overview of platform workflows"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Guided Demo</span>
+              <HelpCircle className="w-3.5 h-3.5 text-[#176B45]" />
+              <span className="hidden sm:inline">Tour</span>
             </button>
 
             {/* Notification Bell */}
             <div className="relative">
               <button
                 onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
-                className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                className="relative p-2 text-[#657169] hover:text-[#17201B] hover:bg-slate-100 rounded-[6px] transition-colors cursor-pointer"
                 title="Notifications"
               >
-                <Bell className="w-5 h-5" />
+                <Bell className="w-4 h-4" />
                 {unreadNotifs.length > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-600 rounded-full ring-2 ring-white"></span>
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#D64545] rounded-full"></span>
                 )}
               </button>
 
               {/* Notification Popover */}
               {notifDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-slate-200 p-4 z-50 animate-in fade-in duration-150">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
-                    <span className="font-bold text-xs text-slate-800 uppercase tracking-wider">
-                      CleanSpot Notifications
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-[10px] shadow-lg border border-[#E2E8E4] p-3.5 z-50">
+                  <div className="flex items-center justify-between border-b border-[#E2E8E4] pb-2 mb-2.5">
+                    <span className="font-semibold text-xs text-[#17201B]">
+                      Notifications
                     </span>
-                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                    <span className="text-[11px] font-medium text-[#176B45] bg-[#E8F5EE] px-2 py-0.5 rounded-[4px]">
                       {unreadNotifs.length} new
                     </span>
                   </div>
 
-                  <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                     {notifications.length === 0 ? (
-                      <p className="text-xs text-slate-400 text-center py-4">No notifications yet</p>
+                      <p className="text-xs text-[#8B9690] text-center py-4">No notifications yet</p>
                     ) : (
                       notifications.slice(0, 5).map((n) => (
                         <div
                           key={n.id}
                           onClick={() => onMarkNotificationRead(n.id)}
-                          className={`p-2.5 rounded-xl border text-xs cursor-pointer transition-colors ${
+                          className={`p-2.5 rounded-[8px] border text-xs cursor-pointer transition-colors ${
                             n.read
-                              ? 'bg-slate-50/60 border-slate-100 text-slate-600'
-                              : 'bg-emerald-50/70 border-emerald-200 text-emerald-950 font-medium'
+                              ? 'bg-[#F7F9F7] border-[#E2E8E4] text-[#657169]'
+                              : 'bg-[#E8F5EE] border-[#3FA66B]/30 text-[#0E4D32]'
                           }`}
                         >
-                          <div className="flex items-center justify-between font-bold text-[11px] mb-0.5">
+                          <div className="flex items-center justify-between font-semibold text-[11px] mb-0.5">
                             <span>{n.title}</span>
-                            <span className="text-[10px] text-slate-400 font-normal">
+                            <span className="text-[10px] text-[#8B9690] font-normal">
                               {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </div>
-                          <p className="text-[11px] text-slate-600 leading-relaxed">{n.message}</p>
+                          <p className="text-[11px] text-[#657169] leading-relaxed">{n.message}</p>
                         </div>
                       ))
                     )}
@@ -203,17 +287,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
 
-            {/* Role Switcher Pill Bar */}
-            <div className="hidden md:flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+            {/* Role Switcher */}
+            <div className="hidden md:flex items-center bg-[#F7F9F7] p-0.5 rounded-[8px] border border-[#E2E8E4] text-xs">
               <button
                 onClick={() => {
                   onRoleChange('citizen');
                   onNavigateTab('report');
                 }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-[6px] font-medium transition-colors cursor-pointer ${
                   currentRole === 'citizen'
-                    ? 'bg-white text-emerald-900 font-bold shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white text-[#176B45] font-semibold shadow-xs'
+                    : 'text-[#657169] hover:text-[#17201B]'
                 }`}
               >
                 <User className="w-3.5 h-3.5" />
@@ -225,14 +309,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onRoleChange('worker');
                   onNavigateTab('worker');
                 }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-[6px] font-medium transition-colors cursor-pointer ${
                   currentRole === 'worker'
-                    ? 'bg-white text-blue-900 font-bold shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white text-blue-900 font-semibold shadow-xs'
+                    : 'text-[#657169] hover:text-[#17201B]'
                 }`}
               >
                 <Truck className="w-3.5 h-3.5" />
-                <span>Field Team</span>
+                <span>Field crew</span>
               </button>
 
               <button
@@ -240,54 +324,54 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onRoleChange('admin');
                   onNavigateTab('admin');
                 }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-[6px] font-medium transition-colors cursor-pointer ${
                   currentRole === 'admin' || currentRole === 'supervisor'
-                    ? 'bg-white text-purple-900 font-bold shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white text-purple-900 font-semibold shadow-xs'
+                    : 'text-[#657169] hover:text-[#17201B]'
                 }`}
               >
                 <Building2 className="w-3.5 h-3.5" />
-                <span>Authority</span>
+                <span>Admin</span>
               </button>
             </div>
 
-            {/* Reset Demo Data */}
+            {/* Reset Data Button */}
             <button
               onClick={onResetData}
-              className="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-              title="Reset to fresh demo data"
+              className="p-2 text-[#8B9690] hover:text-[#17201B] hover:bg-slate-100 rounded-[6px] transition-colors cursor-pointer"
+              title="Reset demonstration data"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className="w-3.5 h-3.5" />
             </button>
 
             {/* Primary Action Button */}
             <button
               onClick={() => onNavigateTab('report')}
-              className="hidden sm:flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
+              className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 bg-[#176B45] hover:bg-[#0E4D32] text-white font-medium text-xs rounded-[6px] transition-colors cursor-pointer"
             >
-              <Camera className="w-4 h-4" />
-              <span>Report Waste</span>
+              <Camera className="w-3.5 h-3.5" />
+              <span>Report waste</span>
             </button>
 
             {/* Mobile Hamburger Menu */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 text-slate-600 hover:text-slate-900 rounded-xl"
+              className="lg:hidden p-2 text-[#657169] hover:text-[#17201B] rounded-[6px]"
             >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
 
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
-          <div className="lg:hidden py-4 border-t border-slate-100 space-y-2 animate-in slide-in-from-top-2 duration-150">
+          <div className="lg:hidden py-3 border-t border-[#E2E8E4] space-y-1">
             <button
               onClick={() => {
                 onNavigateTab('home');
                 setMobileMenuOpen(false);
               }}
-              className="w-full text-left px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="w-full text-left px-3 py-2 rounded-[6px] text-xs font-medium text-[#17201B] hover:bg-[#F7F9F7]"
             >
               Home
             </button>
@@ -296,83 +380,49 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onNavigateTab('report');
                 setMobileMenuOpen(false);
               }}
-              className="w-full text-left px-3 py-2 rounded-xl text-sm font-semibold text-emerald-800 bg-emerald-50 flex items-center gap-2"
+              className="w-full text-left px-3 py-2 rounded-[6px] text-xs font-semibold text-[#176B45] bg-[#E8F5EE] flex items-center gap-2"
             >
-              <Camera className="w-4 h-4" /> Report Waste (Under 30s)
+              <Camera className="w-3.5 h-3.5" />
+              <span>Report waste</span>
             </button>
             <button
               onClick={() => {
                 onNavigateTab('map');
                 setMobileMenuOpen(false);
               }}
-              className="w-full text-left px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+              className="w-full text-left px-3 py-2 rounded-[6px] text-xs font-medium text-[#17201B] hover:bg-[#F7F9F7] flex items-center gap-2"
             >
-              <MapPin className="w-4 h-4" /> Waste Map
-            </button>
-            <button
-              onClick={() => {
-                onNavigateTab('track');
-                setMobileMenuOpen(false);
-              }}
-              className="w-full text-left px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Track My Report
+              <MapPin className="w-3.5 h-3.5" />
+              <span>Waste map</span>
             </button>
             <button
               onClick={() => {
                 onNavigateTab('how-it-works');
                 setMobileMenuOpen(false);
               }}
-              className="w-full text-left px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="w-full text-left px-3 py-2 rounded-[6px] text-xs font-medium text-[#17201B] hover:bg-[#F7F9F7]"
             >
-              How It Works
+              How it works
+            </button>
+            <button
+              onClick={() => {
+                onNavigateTab('track');
+                setMobileMenuOpen(false);
+              }}
+              className="w-full text-left px-3 py-2 rounded-[6px] text-xs font-medium text-[#17201B] hover:bg-[#F7F9F7]"
+            >
+              My reports
             </button>
             <button
               onClick={() => {
                 onNavigateTab('admin');
                 setMobileMenuOpen(false);
               }}
-              className="w-full text-left px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+              className="w-full text-left px-3 py-2 rounded-[6px] text-xs font-medium text-[#17201B] hover:bg-[#F7F9F7] flex items-center gap-2"
             >
-              <Building2 className="w-4 h-4" /> Command Center (Admin)
+              <Building2 className="w-3.5 h-3.5" />
+              <span>Command center</span>
             </button>
-
-            {/* Mobile Role Switcher */}
-            <div className="pt-2 border-t border-slate-100 flex gap-2">
-              <button
-                onClick={() => {
-                  onRoleChange('citizen');
-                  setMobileMenuOpen(false);
-                }}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold ${
-                  currentRole === 'citizen' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700'
-                }`}
-              >
-                Citizen
-              </button>
-              <button
-                onClick={() => {
-                  onRoleChange('worker');
-                  setMobileMenuOpen(false);
-                }}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold ${
-                  currentRole === 'worker' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
-                }`}
-              >
-                Field Team
-              </button>
-              <button
-                onClick={() => {
-                  onRoleChange('admin');
-                  setMobileMenuOpen(false);
-                }}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold ${
-                  currentRole === 'admin' ? 'bg-purple-600 text-white' : 'bg-slate-100 text-slate-700'
-                }`}
-              >
-                Admin
-              </button>
-            </div>
           </div>
         )}
       </div>

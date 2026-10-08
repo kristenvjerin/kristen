@@ -3,7 +3,7 @@ import L from 'leaflet';
 import { Hotspot, WasteReport } from '../types';
 import { getCategoryInfo } from '../utils/categories';
 
-// Fix Leaflet's default icon assets in bundlers
+// Fix Leaflet default icon assets in bundlers
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -14,14 +14,14 @@ L.Icon.Default.mergeOptions({
 interface InteractiveMapProps {
   reports?: WasteReport[];
   hotspots?: Hotspot[];
-  selectedReportId?: string;
-  onSelectReport?: (report: WasteReport) => void;
   center?: [number, number];
   zoom?: number;
   height?: string;
+  onSelectReport?: (report: WasteReport) => void;
+  selectedReportId?: string;
   isPickerMode?: boolean;
-  pickedPosition?: [number, number];
   onPickPosition?: (lat: number, lng: number) => void;
+  pickedPosition?: [number, number];
   showHeatmap?: boolean;
   onCommunityVote?: (reportId: string, vote: 'still_there' | 'cleaned' | 'worsened') => void;
 }
@@ -29,14 +29,14 @@ interface InteractiveMapProps {
 export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   reports = [],
   hotspots = [],
-  selectedReportId,
-  onSelectReport,
-  center = [13.0827, 80.2707],
+  center = [13.0827, 80.2707], // Metro City default
   zoom = 13,
-  height = '480px',
+  height = '420px',
+  onSelectReport,
+  selectedReportId,
   isPickerMode = false,
-  pickedPosition,
   onPickPosition,
+  pickedPosition,
   showHeatmap = false,
   onCommunityVote,
 }) => {
@@ -88,32 +88,47 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
     const pos = pickedPosition || center;
 
-    if (pickerMarkerRef.current) {
-      pickerMarkerRef.current.setLatLng(pos);
-    } else {
-      const pinIcon = L.divIcon({
-        className: 'cleanspot-picker-pin',
+    if (!pickerMarkerRef.current) {
+      const pickerIcon = L.divIcon({
+        className: 'picker-marker',
         html: `
-          <div style="background-color: #059669; width: 34px; height: 34px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center;">
-            <div style="width: 10px; height: 10px; background: white; border-radius: 50%; transform: rotate(45deg);"></div>
+          <div style="
+            background-color: #176B45;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid #FFFFFF;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+          ">
+            <div style="width: 8px; height: 8px; background: white; border-radius: 50%;"></div>
           </div>
         `,
-        iconSize: [34, 34],
-        iconAnchor: [17, 34],
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
       });
 
-      const marker = L.marker(pos, { draggable: true, icon: pinIcon }).addTo(map);
-      marker.on('dragend', () => {
+      pickerMarkerRef.current = L.marker(pos, {
+        icon: pickerIcon,
+        draggable: true,
+      }).addTo(map);
+
+      pickerMarkerRef.current.on('dragend', (e) => {
+        const marker = e.target;
         const newPos = marker.getLatLng();
-        onPickPosition?.(newPos.lat, newPos.lng);
+        if (onPickPosition) {
+          onPickPosition(newPos.lat, newPos.lng);
+        }
       });
-      pickerMarkerRef.current = marker;
+    } else {
+      pickerMarkerRef.current.setLatLng(pos);
     }
-
-    map.panTo(pos);
   }, [pickedPosition, isPickerMode]);
 
-  // Handle Heatmap and Markers
+  // Update Markers, Hotspot Areas, and Heat Density
   useEffect(() => {
     const map = mapInstanceRef.current;
     const markersLayer = markersLayerRef.current;
@@ -123,59 +138,59 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
     markersLayer.clearLayers();
     heatLayer.clearLayers();
 
-    // 1. Render Heatmap Concentration if enabled
+    // 1. Density Layer (Subtle, non-neon, analytical)
     if (showHeatmap) {
       reports.forEach((r) => {
-        const heatCircle = L.circle([r.location.latitude, r.location.longitude], {
-          radius: 180,
-          color: r.severity === 'critical' ? '#EF4444' : '#F59E0B',
-          fillColor: r.severity === 'critical' ? '#EF4444' : '#F59E0B',
-          fillOpacity: 0.25,
+        L.circle([r.location.latitude, r.location.longitude], {
+          radius: 160,
+          color: r.severity === 'critical' ? '#DC2626' : '#D97706',
+          fillColor: r.severity === 'critical' ? '#DC2626' : '#D97706',
+          fillOpacity: 0.18,
           weight: 0,
         }).addTo(heatLayer);
       });
     }
 
-    // 2. Render Hotspot Radii
+    // 2. Hotspot Cluster Boundary Circles
     hotspots.forEach((hs) => {
-      let color = '#EF4444'; // critical
-      if (hs.severityLevel === 'high') color = '#F97316';
-      else if (hs.severityLevel === 'medium') color = '#EAB308';
+      let color = '#DC2626'; // critical
+      if (hs.severityLevel === 'high') color = '#D97706';
+      else if (hs.severityLevel === 'medium') color = '#2563EB';
 
       const circle = L.circle([hs.center.latitude, hs.center.longitude], {
         color,
         fillColor: color,
-        fillOpacity: 0.16,
+        fillOpacity: 0.12,
         radius: hs.radiusMeters,
-        weight: 2,
-        dashArray: '5, 5',
+        weight: 1.5,
+        dashArray: '4, 4',
       }).addTo(markersLayer);
 
       circle.bindPopup(`
-        <div style="font-family: system-ui, sans-serif; font-size: 12px; max-width: 210px; padding: 2px;">
-          <div style="font-weight: 700; color: ${color}; font-size: 13px; margin-bottom: 4px;">🔥 ${hs.name}</div>
-          <div style="margin-bottom: 2px;"><strong>Hotspot Score:</strong> ${hs.score}/100</div>
-          <div style="margin-bottom: 2px;"><strong>Recurrence:</strong> ${hs.incidentCount} reports</div>
-          <div style="font-size: 11px; color: #475569; margin-top: 4px; line-height: 1.3;">
-            <strong>Preventive Recommendation:</strong> ${hs.recommendedIntervention}
+        <div style="font-family: system-ui, -apple-system, sans-serif; font-size: 12px; max-width: 220px; padding: 2px;">
+          <div style="font-weight: 700; color: ${color}; font-size: 13px; margin-bottom: 3px;">${hs.name}</div>
+          <div style="color: #475569; font-size: 11px; margin-bottom: 2px;">Hotspot Score: <strong>${hs.score}/100</strong></div>
+          <div style="color: #475569; font-size: 11px; margin-bottom: 3px;">Recurrence: <strong>${hs.incidentCount} reports</strong></div>
+          <div style="font-size: 11px; color: #334155; margin-top: 4px; padding-top: 4px; border-top: 1px solid #E2E8E4; line-height: 1.35;">
+            <strong>Recommendation:</strong> ${hs.recommendedIntervention}
           </div>
         </div>
       `);
     });
 
-    // 3. Render Incident Markers
+    // 3. Professional Incident Markers (Small circular marker with clear severity color)
     reports.forEach((report) => {
-      let pinColor = '#EF4444'; // Red = Critical
+      let pinColor = '#DC2626'; // Critical
       if (report.status === 'RESOLVED') {
-        pinColor = '#10B981'; // Green = Resolved
+        pinColor = '#16A34A'; // Resolved
       } else if (report.severity === 'critical') {
-        pinColor = '#EF4444'; // Red = Critical
+        pinColor = '#DC2626'; // Red
       } else if (report.severity === 'high') {
-        pinColor = '#F97316'; // Orange = High
+        pinColor = '#D97706'; // Amber
       } else if (report.severity === 'medium') {
-        pinColor = '#EAB308'; // Yellow = Medium
+        pinColor = '#2563EB'; // Blue
       } else {
-        pinColor = '#10B981'; // Low
+        pinColor = '#16A34A'; // Green
       }
 
       const isSelected = report.id === selectedReportId;
@@ -184,24 +199,22 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       const markerHtml = `
         <div style="
           background-color: ${pinColor};
-          width: ${isSelected ? '32px' : '26px'};
-          height: ${isSelected ? '32px' : '26px'};
-          border-radius: 50% 50% 50% 0;
-          transform: rotate(-45deg);
-          border: ${isSelected ? '3px solid #0F172A' : '2px solid white'};
-          box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+          width: ${isSelected ? '24px' : '18px'};
+          height: ${isSelected ? '24px' : '18px'};
+          border-radius: 50%;
+          border: ${isSelected ? '3px solid #0F172A' : '2px solid #FFFFFF'};
+          box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+          cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          cursor: pointer;
           transition: transform 0.15s ease;
         ">
           <div style="
-            width: 8px;
-            height: 8px;
-            background: white;
+            width: 6px;
+            height: 6px;
+            background: #FFFFFF;
             border-radius: 50%;
-            transform: rotate(45deg);
           "></div>
         </div>
       `;
@@ -209,8 +222,8 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       const icon = L.divIcon({
         className: 'cleanspot-marker',
         html: markerHtml,
-        iconSize: isSelected ? [32, 32] : [26, 26],
-        iconAnchor: isSelected ? [16, 32] : [13, 26],
+        iconSize: isSelected ? [24, 24] : [18, 18],
+        iconAnchor: isSelected ? [12, 12] : [9, 9],
       });
 
       const marker = L.marker([report.location.latitude, report.location.longitude], {
@@ -225,26 +238,26 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         (report.communityVotes?.stillThere || 0) + (report.communityVotes?.worsened || 0);
 
       const popupHtml = `
-        <div style="font-family: system-ui, sans-serif; font-size: 12px; width: 220px; padding: 2px;">
+        <div style="font-family: system-ui, -apple-system, sans-serif; font-size: 12px; width: 220px; padding: 2px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <strong style="color: #0F172A; font-size: 13px;">${report.id}</strong>
-            <span style="font-size: 10px; padding: 2px 6px; border-radius: 9999px; background: ${pinColor}22; color: ${pinColor}; font-weight: 700; text-transform: uppercase;">
+            <span style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: ${pinColor}18; color: ${pinColor}; font-weight: 700; text-transform: uppercase;">
               ${report.severity}
             </span>
           </div>
 
-          <div style="width: 100%; height: 95px; border-radius: 8px; overflow: hidden; background: #F1F5F9; margin-bottom: 6px;">
-            <img src="${report.imageUrls[0]}" style="width: 100%; height: 100%; object-fit: cover;" alt="Report" />
+          <div style="width: 100%; height: 95px; border-radius: 6px; overflow: hidden; background: #F1F5F9; margin-bottom: 6px;">
+            <img src="${report.imageUrls[0]}" style="width: 100%; height: 100%; object-fit: cover;" alt="Report site" />
           </div>
 
-          <div style="font-weight: 700; color: #1E293B; margin-bottom: 2px;">${catInfo.label}</div>
-          <div style="color: #64748B; font-size: 11px; margin-bottom: 6px; line-height: 1.3;">
-            📍 ${report.location.approximateLocation || report.location.formattedAddress}
+          <div style="font-weight: 600; color: #1E293B; margin-bottom: 2px;">${catInfo.label}</div>
+          <div style="color: #64748B; font-size: 11px; margin-bottom: 6px; line-height: 1.35;">
+            ${report.location.approximateLocation || report.location.formattedAddress}
           </div>
 
-          <div style="display: flex; justify-content: space-between; font-size: 11px; color: #334155; margin-bottom: 6px; border-top: 1px solid #F1F5F9; padding-top: 4px;">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: #334155; margin-bottom: 4px; border-top: 1px solid #E2E8E4; padding-top: 4px;">
             <span>Status: <strong style="text-transform: capitalize;">${report.status.replace(/_/g, ' ').toLowerCase()}</strong></span>
-            ${votesCount > 0 ? `<span style="color: #059669; font-weight: 600;">👥 ${votesCount} votes</span>` : ''}
+            ${votesCount > 0 ? `<span style="color: #16A34A; font-weight: 600;">${votesCount} confirmations</span>` : ''}
           </div>
         </div>
       `;
@@ -257,7 +270,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
     <div
       ref={mapContainerRef}
       style={{ height, width: '100%' }}
-      className="rounded-2xl overflow-hidden shadow-inner border border-slate-200"
+      className="rounded-[10px] overflow-hidden border border-[#E2E8E4]"
     />
   );
 };

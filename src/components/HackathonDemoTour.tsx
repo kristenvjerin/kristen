@@ -46,7 +46,7 @@ export const HackathonDemoTour: React.FC<HackathonDemoTourProps> = ({
       icon: Award,
       tag: 'SUBMISSION & COMMUNITY VOTING',
       description:
-        'CleanSpot generates a unique ID (e.g. CS-2026-000184). Nearby citizens exploring the Waste Map can confirm "Is this waste still here?" (👍 Still There / ⚠️ Worsened), increasing priority confidence without creating duplicate complaints.',
+        'CleanSpot generates a unique ID (such as CS-2026-000184). Nearby citizens exploring the Waste Map can confirm "Is this waste still here?" (Still There / Worsened), increasing priority confidence without creating duplicate complaints.',
       actionNote: 'Explore Waste Map → Find report → Vote "Still There" or "Cleaned"!',
     },
     {

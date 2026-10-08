@@ -6,10 +6,14 @@ import {
   WasteReport,
   WasteVolume,
 } from '../types';
+import { UserProfile } from '../types/gamification';
 import { WASTE_CATEGORIES, getCategoryInfo } from '../utils/categories';
-import { SAMPLE_PRESET_IMAGES } from '../utils/seedData';
+import { SAMPLE_PRESET_IMAGES, RESOLUTION_CLEAN_IMAGE } from '../utils/seedData';
 import { ApiService } from '../services/api';
 import { InteractiveMap } from './InteractiveMap';
+import { GamificationDashboard } from './GamificationDashboard';
+import { LeaderboardView } from './LeaderboardView';
+import { PointRewardModal } from './PointRewardModal';
 import {
   Camera,
   Upload,
@@ -28,10 +32,19 @@ import {
   Loader2,
   Info,
   ThumbsUp,
-  SlidersHorizontal,
   Navigation,
-  FileCheck,
+  Copy,
+  SlidersHorizontal,
+  ArrowRight,
+  List,
+  Map as MapIcon,
   Trash2,
+  Flame,
+  Trophy,
+  User,
+  ShieldAlert,
+  HelpCircle,
+  TrendingUp,
 } from 'lucide-react';
 
 interface CitizenViewProps {
@@ -40,7 +53,7 @@ interface CitizenViewProps {
   onRefresh: () => void;
   activeCitizenId?: string;
   activeCitizenName?: string;
-  initialTab?: 'report' | 'my-reports' | 'nearby';
+  initialTab?: 'report' | 'profile' | 'nearby' | 'leaderboard' | 'my-reports';
 }
 
 export const CitizenView: React.FC<CitizenViewProps> = ({
@@ -48,16 +61,24 @@ export const CitizenView: React.FC<CitizenViewProps> = ({
   onReportCreated,
   onRefresh,
   activeCitizenId = 'citizen-01',
-  activeCitizenName = 'Maya Sharma',
+  activeCitizenName = 'Kristen',
   initialTab = 'report',
 }) => {
-  const [activeTab, setActiveTab] = useState<'report' | 'my-reports' | 'nearby'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'report' | 'profile' | 'nearby' | 'leaderboard' | 'my-reports'>(initialTab);
+  const [userProfile, setUserProfile] = useState<UserProfile>(ApiService.getUserProfile());
 
-  // Wizard state for Report Waste
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  // 6-STEP REPORTING MISSION FLOW
+  // Step 1: Mission Starter "Report Waste"
+  // Step 2: "Capture the problem" (Photo)
+  // Step 3: "Where did you find it?" (Location + Anti-spam proximity check)
+  // Step 4: "Select Category" (Category)
+  // Step 5: "Select Severity" (Severity)
+  // Step 6: "Review & Submit" (Review with Points Estimate)
+  const [reportStep, setReportStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
   const [selectedImage, setSelectedImage] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [aiResult, setAiResult] = useState<AIAnalysisResult | null>(null);
+  const [aiConfirmed, setAiConfirmed] = useState<boolean>(true);
 
   // Form fields
   const [category, setCategory] = useState<WasteCategory>('overflowing_bin');
@@ -65,6 +86,12 @@ export const CitizenView: React.FC<CitizenViewProps> = ({
   const [volume, setVolume] = useState<WasteVolume>('large');
   const [description, setDescription] = useState<string>('');
   const [landmark, setLandmark] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Anti-spam warning state
+  const [antiSpamWarning, setAntiSpamWarning] = useState<string | null>(null);
+
+  // Location state
   const [location, setLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -75,152 +102,218 @@ export const CitizenView: React.FC<CitizenViewProps> = ({
     latitude: 13.0827,
     longitude: 80.2707,
     formattedAddress: 'Gandhi Road Commercial Sector, Metro City',
-    approximateLocation: 'Gandhi Road (Sector 1)',
+    approximateLocation: 'Near Gandhi Road (Sector 1)',
     zoneId: 'zone-central',
   });
-
-  const [locationError, setLocationError] = useState<string | null>(null);
+  const [locationPermissionDenied, setLocationPermissionDenied] = useState<boolean>(false);
   const [isLocating, setIsLocating] = useState<boolean>(false);
+  const [locationConfirmed, setLocationConfirmed] = useState<boolean>(false);
 
-  // Submission result & Inspection modal
+  // Point Reward Modal State
+  const [pointRewardState, setPointRewardState] = useState<{
+    isOpen: boolean;
+    pointsAwarded: number;
+    breakdown: { base: number; photo: number; location: number; hotspot: number };
+    previousTotal: number;
+    newTotal: number;
+    levelUp: boolean;
+  }>({
+    isOpen: false,
+    pointsAwarded: 85,
+    breakdown: { base: 50, photo: 20, location: 15, hotspot: 0 },
+    previousTotal: 1240,
+    newTotal: 1325,
+    levelUp: false,
+  });
+
+  // Success / Tracking & Inspection state
   const [submittedReport, setSubmittedReport] = useState<WasteReport | null>(null);
+  const [copiedId, setCopiedId] = useState<boolean>(false);
   const [inspectReport, setInspectReport] = useState<WasteReport | null>(null);
   const [reopenModalReport, setReopenModalReport] = useState<WasteReport | null>(null);
   const [reopenReason, setReopenReason] = useState<string>('');
 
-  // Map Filter state for "Waste Map" tab
-  const [mapStatusFilter, setMapStatusFilter] = useState<string>('ALL');
-  const [mapSeverityFilter, setMapSeverityFilter] = useState<string>('ALL');
+  // Before/After comparison slider state (0 to 100%)
+  const [compareSliderPos, setCompareSliderPos] = useState<number>(50);
+
+  // Waste Map View toggles
+  const [mapDisplayMode, setMapDisplayMode] = useState<'map' | 'list'>('map');
+  const [mapSearch, setMapSearch] = useState<string>('');
   const [mapCategoryFilter, setMapCategoryFilter] = useState<string>('ALL');
+  const [mapSeverityFilter, setMapSeverityFilter] = useState<string>('ALL');
   const [unresolvedOnly, setUnresolvedOnly] = useState<boolean>(false);
 
-  // Tracking search
-  const [searchTrackingId, setSearchTrackingId] = useState<string>('');
+  // My Reports tab
+  const [myReportsSubTab, setMyReportsSubTab] = useState<'all' | 'active' | 'resolved'>('all');
 
-  // Personal reports
-  const myReports = reports.filter((r) => r.citizenId === activeCitizenId);
-  const resolvedCount = myReports.filter((r) => r.status === 'RESOLVED').length;
-
-  // Handle Preset selection
-  const handleSelectPreset = (presetUrl: string, defaultCat: string) => {
-    setSelectedImage(presetUrl);
-    setCategory(defaultCat as WasteCategory);
-    setStep(2);
-    runAIAnalysis(presetUrl);
+  const refreshProfile = () => {
+    setUserProfile(ApiService.getUserProfile());
   };
 
-  // Handle File Upload & Validation
+  // Image Upload handler
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (!file.type.match(/^image\/(jpeg|jpg|png|webp)$/)) {
-        alert('Please upload a valid image file (JPG, PNG, or WEBP).');
-        return;
-      }
-      if (file.size > 10 * 1024 * 1024) {
-        alert('Image exceeds 10MB limit. Please upload a smaller image.');
-        return;
-      }
+    if (!file) return;
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        setSelectedImage(base64);
-        setStep(2);
-        runAIAnalysis(base64);
-      };
-      reader.readAsDataURL(file);
-    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const b64 = reader.result as string;
+      setSelectedImage(b64);
+      setReportStep(3); // proceed to location
+      runAiAnalysis(b64);
+    };
+    reader.readAsDataURL(file);
   };
 
-  // Run Gemini Multimodal AI
-  const runAIAnalysis = async (img: string) => {
+  const handleSelectPreset = (url: string, presetCat?: WasteCategory | string) => {
+    setSelectedImage(url);
+    if (presetCat) setCategory(presetCat as WasteCategory);
+    setReportStep(3); // proceed to location
+    runAiAnalysis(url);
+  };
+
+  // Run AI analysis
+  const runAiAnalysis = async (imgSource: string) => {
     setIsAnalyzing(true);
     try {
-      const result = await ApiService.analyzeImageAI(img);
-      setAiResult(result);
-      if (result.primaryCategory) setCategory(result.primaryCategory);
-      if (result.severity) setSeverity(result.severity);
-      if (result.estimatedVolume) setVolume(result.estimatedVolume);
-      if (result.reasoningSummary) setDescription(result.reasoningSummary);
-    } catch (err) {
-      console.warn('AI analysis failed:', err);
+      const res = await ApiService.analyzeImageAI(imgSource);
+      setAiResult(res);
+      if (res.primaryCategory) setCategory(res.primaryCategory);
+      if (res.severity) setSeverity(res.severity);
+      if (res.estimatedVolume) setVolume(res.estimatedVolume);
+    } catch {
+      // Graceful fallback
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  // Browser Geolocation API
+  // Browser Geolocation
   const handleGetLocation = () => {
     setIsLocating(true);
-    setLocationError(null);
+    setLocationPermissionDenied(false);
+
     if (!navigator.geolocation) {
-      setLocationError('Geolocation is not supported by your browser. Please select location on the map.');
+      setLocationPermissionDenied(true);
       setIsLocating(false);
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setIsLocating(false);
         const lat = Number(pos.coords.latitude.toFixed(6));
         const lng = Number(pos.coords.longitude.toFixed(6));
-        setLocation({
+        setLocation((prev) => ({
+          ...prev,
           latitude: lat,
           longitude: lng,
-          formattedAddress: `Street at GPS Coordinates ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-          approximateLocation: `Near Municipal Sector (${lat.toFixed(2)}, ${lng.toFixed(2)})`,
-          zoneId: 'zone-central',
-        });
-      },
-      (err) => {
+          formattedAddress: `Sector 4, Near Coordinate (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+          approximateLocation: `Zone Central (${lat.toFixed(2)}, ${lng.toFixed(2)})`,
+        }));
+        setLocationConfirmed(true);
         setIsLocating(false);
-        setLocationError(
-          'Location access is turned off. You can place the pin manually on the map below.'
-        );
+
+        // Run anti-spam proximity check
+        const antiSpam = ApiService.checkAntiSpam(lat, lng, category);
+        if (antiSpam.isDuplicate) {
+          setAntiSpamWarning(antiSpam.reason || 'Similar report detected nearby. Merged with ongoing ticket.');
+        } else if (antiSpam.dailyLimitReached) {
+          setAntiSpamWarning(antiSpam.reason || 'Daily reporting limit of 5 reached.');
+        } else {
+          setAntiSpamWarning(null);
+        }
+      },
+      () => {
+        setLocationPermissionDenied(true);
+        setIsLocating(false);
       },
       { timeout: 8000 }
     );
   };
 
-  // Submit report
+  // Submit Report
   const handleSubmitReport = () => {
-    const newReport = ApiService.createReport({
-      citizenId: activeCitizenId,
-      citizenName: activeCitizenName,
-      citizenEmail: 'maya.sharma@example.com',
-      imageUrls: [selectedImage || SAMPLE_PRESET_IMAGES[0].url],
-      category,
-      userCategory: category,
-      severity,
-      estimatedVolume: volume,
-      aiConfidence: aiResult?.confidence || 0.89,
-      aiAnalysis: aiResult || undefined,
-      description: description || 'Waste accumulated along public pedestrian way.',
-      landmark,
-      location: {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        accuracy: 10,
-        formattedAddress: location.formattedAddress,
-        approximateLocation: location.approximateLocation,
-        zoneId: location.zoneId,
-      },
-    });
+    setIsSubmitting(true);
+    setTimeout(() => {
+      // 1. Anti-spam check
+      const antiSpam = ApiService.checkAntiSpam(location.latitude, location.longitude, category);
 
-    setSubmittedReport(newReport);
-    onReportCreated(newReport);
-    setStep(1);
-    setSelectedImage('');
-    setAiResult(null);
-    setDescription('');
-    setLandmark('');
+      const newReport = ApiService.createReport({
+        citizenId: activeCitizenId,
+        citizenName: userProfile.name,
+        citizenEmail: userProfile.email,
+        imageUrls: [selectedImage || SAMPLE_PRESET_IMAGES[0].url],
+        category,
+        userCategory: category,
+        severity,
+        estimatedVolume: volume,
+        aiConfidence: aiResult?.confidence || 0.91,
+        aiAnalysis: aiResult || undefined,
+        description: description || 'Waste accumulated along public pedestrian way.',
+        landmark,
+        location: {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          accuracy: 10,
+          formattedAddress: location.formattedAddress,
+          approximateLocation: location.approximateLocation,
+          zoneId: location.zoneId,
+        },
+      });
+
+      if (antiSpam.isDuplicate && antiSpam.nearbyReportId) {
+        // Linked duplicate: 0 additional points
+        ApiService.linkDuplicate(newReport.id, antiSpam.nearbyReportId, 'Automated Duplicate Guard');
+        setSubmittedReport(newReport);
+        onReportCreated(newReport);
+        setIsSubmitting(false);
+        setReportStep(1);
+        setSelectedImage('');
+        setAiResult(null);
+        setDescription('');
+        setLandmark('');
+        refreshProfile();
+        return;
+      }
+
+      // 2. Award Civic Points & trigger rewarding animation
+      const previousTotal = userProfile.civicPoints;
+      const isHotspot = false; // standard incident
+      const rewardResult = ApiService.recordReportSubmitted(isHotspot);
+
+      setPointRewardState({
+        isOpen: true,
+        pointsAwarded: rewardResult.pointsAwarded,
+        breakdown: rewardResult.breakdown,
+        previousTotal,
+        newTotal: rewardResult.profile.civicPoints,
+        levelUp: rewardResult.levelUp,
+      });
+
+      setSubmittedReport(newReport);
+      onReportCreated(newReport);
+      setIsSubmitting(false);
+      setReportStep(1);
+      setSelectedImage('');
+      setAiResult(null);
+      setDescription('');
+      setLandmark('');
+      refreshProfile();
+    }, 600);
   };
 
-  // Community confirmation vote
+  // Copy Report ID
+  const handleCopyId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
+  };
+
+  // Community confirmation vote (Awards +15 points!)
   const handleVote = (reportId: string, vote: 'still_there' | 'cleaned' | 'worsened') => {
     ApiService.voteCommunity(reportId, vote, activeCitizenId);
     onRefresh();
+    refreshProfile();
     if (inspectReport && inspectReport.id === reportId) {
       setInspectReport(ApiService.getReportById(reportId) || null);
     }
@@ -232,11 +325,12 @@ export const CitizenView: React.FC<CitizenViewProps> = ({
       ApiService.citizenVerifyReport(
         reportId,
         activeCitizenId,
-        activeCitizenName,
+        userProfile.name,
         'YES',
-        'Verified clean. Thank you!'
+        'Verified clean by resident. Thank you!'
       );
       onRefresh();
+      refreshProfile();
       setInspectReport(null);
     } else {
       const target = reports.find((r) => r.id === reportId);
@@ -249,425 +343,649 @@ export const CitizenView: React.FC<CitizenViewProps> = ({
     ApiService.citizenVerifyReport(
       reopenModalReport.id,
       activeCitizenId,
-      activeCitizenName,
+      userProfile.name,
       'NO',
-      reopenReason || 'Debris was not completely removed upon inspection.'
+      reopenReason || 'Debris was not completely removed upon resident inspection.'
     );
     setReopenModalReport(null);
     setInspectReport(null);
     setReopenReason('');
     onRefresh();
+    refreshProfile();
   };
 
   // Filtered reports for Waste Map
   const filteredMapReports = reports.filter((r) => {
     if (unresolvedOnly && (r.status === 'RESOLVED' || r.status === 'REJECTED')) return false;
-    if (mapStatusFilter !== 'ALL' && r.status !== mapStatusFilter) return false;
-    if (mapSeverityFilter !== 'ALL' && r.severity !== mapSeverityFilter) return false;
     if (mapCategoryFilter !== 'ALL' && r.category !== mapCategoryFilter) return false;
+    if (mapSeverityFilter !== 'ALL' && r.severity !== mapSeverityFilter) return false;
+    if (mapSearch.trim()) {
+      const q = mapSearch.toLowerCase();
+      const match =
+        r.id.toLowerCase().includes(q) ||
+        r.location.formattedAddress.toLowerCase().includes(q) ||
+        r.description.toLowerCase().includes(q);
+      if (!match) return false;
+    }
     return true;
   });
 
+  // Personal reports
+  const myReports = reports.filter((r) => r.citizenId === activeCitizenId || r.citizenName === userProfile.name);
+  const filteredMyReports = myReports.filter((r) => {
+    if (myReportsSubTab === 'active') return r.status !== 'RESOLVED' && r.status !== 'REJECTED';
+    if (myReportsSubTab === 'resolved') return r.status === 'RESOLVED';
+    return true;
+  });
+
+  // Calculate local area summary metrics for the map gamification layer
+  const nearbyCount = reports.length;
+  const resolvedThisWeek = reports.filter((r) => r.status === 'RESOLVED').length;
+  const recurringHotspotsCount = 3;
+
   return (
     <div className="space-y-6">
-      {/* Sub-Navigation Pill Tabs */}
-      <div className="flex items-center justify-between border-b border-slate-200 pb-3 flex-wrap gap-2">
-        <div className="flex gap-2">
+      {/* SUB-NAVIGATION TABS (Gamified Citizen Platform) */}
+      <div className="flex items-center justify-between border-b border-[#E2E8E4] pb-3 flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
+          {/* Tab 1: Report Waste */}
           <button
             onClick={() => {
               setActiveTab('report');
-              setStep(1);
+              setReportStep(1);
             }}
-            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`touch-target px-3.5 py-2 rounded-[10px] text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'report'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-100'
+                ? 'bg-[#176B45] text-white shadow-xs'
+                : 'text-[#657169] hover:bg-slate-100 hover:text-[#17201B]'
             }`}
           >
             <Camera className="w-4 h-4" />
-            Report Waste (Under 30s)
+            <span>Report Waste</span>
           </button>
+
+          {/* Tab 2: Civic Profile & Impact */}
+          <button
+            onClick={() => setActiveTab('profile')}
+            className={`touch-target px-3.5 py-2 rounded-[10px] text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'profile'
+                ? 'bg-[#176B45] text-white shadow-xs'
+                : 'text-[#657169] hover:bg-slate-100 hover:text-[#17201B]'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>Civic Profile & Impact</span>
+          </button>
+
+          {/* Tab 3: Community Map */}
           <button
             onClick={() => setActiveTab('nearby')}
-            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`touch-target px-3.5 py-2 rounded-[10px] text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'nearby'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-100'
+                ? 'bg-[#176B45] text-white shadow-xs'
+                : 'text-[#657169] hover:bg-slate-100 hover:text-[#17201B]'
             }`}
           >
             <MapPin className="w-4 h-4" />
-            Waste Map ({reports.length})
+            <span>Community Map ({reports.length})</span>
           </button>
+
+          {/* Tab 4: Community Leaders */}
           <button
-            onClick={() => setActiveTab('my-reports')}
-            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'my-reports'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-100'
+            onClick={() => setActiveTab('leaderboard')}
+            className={`touch-target px-3.5 py-2 rounded-[10px] text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'leaderboard'
+                ? 'bg-[#176B45] text-white shadow-xs'
+                : 'text-[#657169] hover:bg-slate-100 hover:text-[#17201B]'
             }`}
           >
-            Track My Reports ({myReports.length})
+            <Trophy className="w-4 h-4" />
+            <span>Community Leaders</span>
+          </button>
+
+          {/* Tab 5: Track Reports */}
+          <button
+            onClick={() => setActiveTab('my-reports')}
+            className={`touch-target px-3.5 py-2 rounded-[10px] text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'my-reports'
+                ? 'bg-[#176B45] text-white shadow-xs'
+                : 'text-[#657169] hover:bg-slate-100 hover:text-[#17201B]'
+            }`}
+          >
+            <span>My Reports ({myReports.length})</span>
           </button>
         </div>
 
-        {/* Citizen badge */}
-        <div className="hidden sm:flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full text-xs font-semibold text-emerald-800">
-          <Award className="w-4 h-4 text-emerald-600" />
-          <span>Active Reporter • {resolvedCount * 20 + 40} Civic Pts</span>
+        {/* Quick User Level & Points Status in Subnav */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab('profile')}
+            className="flex items-center gap-2 bg-[#E8F5EE] border border-[#3FA66B]/30 px-3 py-1.5 rounded-full text-xs font-semibold text-[#176B45] hover:bg-[#D5EEDB] transition-colors cursor-pointer"
+          >
+            <Award className="w-3.5 h-3.5 text-[#3FA66B]" />
+            <span>
+              Level {userProfile.level} • {userProfile.civicPoints.toLocaleString()} pts
+            </span>
+          </button>
         </div>
       </div>
 
-      {/* SUBMISSION CONFIRMATION BANNER */}
-      {submittedReport && (
-        <div className="p-5 bg-emerald-50 border border-emerald-300 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-in fade-in duration-300">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <CheckCircle2 className="w-7 h-7" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="font-extrabold text-slate-900 text-base">Report Submitted Successfully!</h4>
-                <span className="font-mono text-xs px-2.5 py-0.5 rounded-full bg-emerald-200 text-emerald-950 font-black">
-                  {submittedReport.id}
-                </span>
+      {/* REWARD CELEBRATION MODAL */}
+      <PointRewardModal
+        isOpen={pointRewardState.isOpen}
+        onClose={() => setPointRewardState((prev) => ({ ...prev, isOpen: false }))}
+        pointsAwarded={pointRewardState.pointsAwarded}
+        breakdown={pointRewardState.breakdown}
+        previousTotal={pointRewardState.previousTotal}
+        newTotal={pointRewardState.newTotal}
+        levelUp={pointRewardState.levelUp}
+      />
+
+      {/* TAB 1: 6-STEP REPORTING MISSION WIZARD */}
+      {activeTab === 'report' && !submittedReport && (
+        <div className="max-w-2xl mx-auto bg-white rounded-[20px] border border-[#E2E8E4] p-6 sm:p-8 shadow-xs space-y-6">
+          {/* Header & Mission Step Progress */}
+          <div className="space-y-3 border-b border-[#E2E8E4] pb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-lg text-[#17201B] tracking-tight">Report Waste</h2>
+                <p className="text-xs text-[#657169]">
+                  "You earn points when your contribution helps identify or resolve a real waste problem."
+                </p>
               </div>
-              <p className="text-xs text-slate-600 mt-0.5">
-                Target SLA: {submittedReport.priority} Priority • Thank you for keeping your community clean!
-              </p>
+              <span className="text-xs font-semibold text-[#176B45] bg-[#E8F5EE] px-2.5 py-1 rounded-full border border-[#CBE5D7]">
+                Step {reportStep} of 6
+              </span>
+            </div>
+
+            {/* Compact 6-step indicators */}
+            <div className="grid grid-cols-6 gap-1 text-[11px] font-medium text-[#657169]">
+              {[
+                { step: 1, label: '1. Mission' },
+                { step: 2, label: '2. Photo' },
+                { step: 3, label: '3. Location' },
+                { step: 4, label: '4. Category' },
+                { step: 5, label: '5. Severity' },
+                { step: 6, label: '6. Review' },
+              ].map((s) => (
+                <div
+                  key={s.step}
+                  onClick={() => {
+                    if (s.step === 1 || (selectedImage && s.step <= reportStep)) {
+                      setReportStep(s.step as any);
+                    }
+                  }}
+                  className={`py-1 text-center rounded-[6px] border transition-all truncate px-1 ${
+                    reportStep === s.step
+                      ? 'border-[#176B45] bg-[#E8F5EE] text-[#0E4D32] font-semibold'
+                      : reportStep > s.step
+                      ? 'bg-slate-100 border-slate-200 text-[#17201B] cursor-pointer'
+                      : 'border-transparent text-slate-400'
+                  }`}
+                >
+                  {s.label}
+                </div>
+              ))}
             </div>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                setInspectReport(submittedReport);
-                setSubmittedReport(null);
-                setActiveTab('my-reports');
-              }}
-              className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer"
-            >
-              Track Report
-            </button>
-            <button
-              onClick={() => setSubmittedReport(null)}
-              className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold rounded-xl cursor-pointer"
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      )}
 
-      {/* TAB 1: 4-STEP FAST REPORT WIZARD */}
-      {activeTab === 'report' && (
-        <div className="max-w-2xl mx-auto bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
-          {/* Progress Header */}
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <div>
-              <h2 className="font-extrabold text-slate-900 text-xl tracking-tight">Report Waste</h2>
-              <p className="text-xs text-slate-500">Fast 30-second reporting flow with AI assistance</p>
+          {/* STEP 1: MISSION STARTER */}
+          {reportStep === 1 && (
+            <div className="space-y-5 text-center py-4">
+              <div className="w-16 h-16 rounded-full bg-[#E8F5EE] text-[#176B45] flex items-center justify-center mx-auto shadow-xs border border-[#CBE5D7]">
+                <Camera className="w-8 h-8" />
+              </div>
+
+              <div className="space-y-1.5 max-w-md mx-auto">
+                <h3 className="text-base font-bold text-[#17201B]">
+                  Mission: Spot & Document Local Waste
+                </h3>
+                <p className="text-xs text-[#657169] leading-relaxed">
+                  Help municipal teams dispatch crews faster by capturing clear photo evidence and an accurate location pin.
+                </p>
+              </div>
+
+              {/* Point Earning Potential Box */}
+              <div className="bg-[#F7F9F7] rounded-[12px] border border-[#E2E8E4] p-4 text-xs max-w-md mx-auto text-left space-y-2">
+                <div className="font-semibold text-[#17201B] flex items-center justify-between">
+                  <span>Earn up to +85 Civic Points:</span>
+                  <span className="text-[#176B45] font-bold">+85 pts</span>
+                </div>
+                <div className="space-y-1 text-[#657169] text-[11px]">
+                  <div className="flex items-center justify-between">
+                    <span>• Valid waste report:</span>
+                    <span className="font-medium text-[#17201B]">+50 pts</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>• Clear photo evidence:</span>
+                    <span className="font-medium text-[#17201B]">+20 pts</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>• Accurate location pin:</span>
+                    <span className="font-medium text-[#17201B]">+15 pts</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-[#E2E8E4] text-[#0E4D32]">
+                    <span>• Authority verification bonus:</span>
+                    <span className="font-bold">+40 pts (when verified)</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setReportStep(2)}
+                  className="py-3 px-8 bg-[#176B45] hover:bg-[#0E4D32] text-white font-semibold text-xs sm:text-sm rounded-[10px] shadow-xs cursor-pointer inline-flex items-center gap-2"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>Start Report Mission →</span>
+                </button>
+              </div>
             </div>
-            <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-              Step {step} of 4
-            </span>
-          </div>
+          )}
 
-          {/* STEP 1: ADD PHOTO */}
-          {step === 1 && (
+          {/* STEP 2: UPLOAD/TAKE PHOTO ("Capture the problem") */}
+          {reportStep === 2 && (
             <div className="space-y-5">
               <div className="space-y-1">
-                <h3 className="font-bold text-slate-900 text-sm">What did you find?</h3>
-                <p className="text-xs text-slate-500">
-                  Upload an image of the waste or take a photo on your device.
+                <h3 className="font-semibold text-base text-[#17201B]">Capture the problem</h3>
+                <p className="text-xs text-[#657169]">
+                  Take a clear photo showing the waste accumulation and surrounding landmark.
                 </p>
               </div>
 
               {/* Upload Dropzone */}
-              <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-emerald-300 hover:border-emerald-500 rounded-3xl bg-emerald-50/20 hover:bg-emerald-50/40 transition-all cursor-pointer text-center group">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+              <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-[#3FA66B]/50 hover:border-[#176B45] rounded-[16px] bg-[#F7F9F7] hover:bg-[#E8F5EE]/40 transition-all cursor-pointer text-center group">
+                <div className="w-14 h-14 rounded-[12px] bg-[#E8F5EE] text-[#176B45] flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
                   <Camera className="w-7 h-7" />
                 </div>
-                <span className="text-sm font-bold text-slate-800">Take Photo or Upload Image</span>
-                <span className="text-xs text-slate-500 mt-1">Supports JPG, PNG, WEBP up to 10MB</span>
+                <span className="text-sm font-semibold text-[#17201B]">
+                  Take a Photo or upload an image
+                </span>
+                <span className="text-xs text-[#657169] mt-1">PNG, JPG, WEBP supported (up to 10MB)</span>
                 <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
               </label>
 
-              {/* Instant Test Presets for Evaluators */}
+              {/* Sample presets for fast testing */}
               <div className="space-y-2 pt-2">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Or click a realistic sample photo to test instantly:</span>
-                </div>
+                <span className="text-xs font-semibold text-[#17201B] flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-[#176B45]" />
+                  Or test with sample citizen photos:
+                </span>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   {SAMPLE_PRESET_IMAGES.map((preset) => (
                     <button
                       key={preset.id}
+                      type="button"
                       onClick={() => handleSelectPreset(preset.url, preset.category)}
-                      className="group p-2 rounded-2xl border border-slate-200 hover:border-emerald-500 bg-white hover:shadow-xs transition-all text-left space-y-1.5 cursor-pointer"
+                      className="p-2 rounded-[12px] border border-[#E2E8E4] hover:border-[#176B45] bg-white text-left space-y-1.5 cursor-pointer transition-all hover:shadow-xs"
                     >
-                      <div className="aspect-square w-full rounded-xl overflow-hidden bg-slate-100">
-                        <img
-                          src={preset.url}
-                          alt={preset.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
+                      <div className="aspect-square w-full rounded-[8px] overflow-hidden bg-slate-100">
+                        <img src={preset.url} alt={preset.title} className="w-full h-full object-cover" />
                       </div>
-                      <p className="font-bold text-[11px] text-slate-800 line-clamp-1">{preset.title}</p>
-                      <span className="text-[10px] text-emerald-700 font-semibold block">Click to test</span>
+                      <p className="font-semibold text-[11px] text-[#17201B] truncate">{preset.title}</p>
+                      <span className="text-[10px] text-[#176B45] font-semibold block">Click to test</span>
                     </button>
                   ))}
                 </div>
               </div>
+
+              <div className="flex justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => setReportStep(1)}
+                  className="px-4 py-2 text-xs font-semibold text-[#657169] hover:text-[#17201B] cursor-pointer"
+                >
+                  ← Back to Mission
+                </button>
+              </div>
             </div>
           )}
 
-          {/* STEP 2: AI ANALYSIS & CATEGORY CONFIRMATION */}
-          {step === 2 && (
+          {/* STEP 3: SELECT LOCATION ("Where did you find it?") */}
+          {reportStep === 3 && (
             <div className="space-y-5">
-              <div className="aspect-video w-full rounded-2xl overflow-hidden bg-slate-100 relative shadow-inner">
-                <img src={selectedImage} alt="Uploaded" className="w-full h-full object-cover" />
-                {isAnalyzing && (
-                  <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex flex-col items-center justify-center text-white space-y-2">
-                    <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
-                    <span className="font-bold text-xs tracking-wide">
-                      Gemini Multimodal AI Analyzing Hazard...
-                    </span>
-                    <span className="text-[10px] text-slate-300">
-                      Detecting waste category, volume, and public health risk
-                    </span>
-                  </div>
-                )}
+              <div className="space-y-1">
+                <h3 className="font-semibold text-base text-[#17201B]">Where did you find it?</h3>
+                <p className="text-xs text-[#657169]">
+                  Provide an accurate location to help dispatch crews locate the site quickly.
+                </p>
               </div>
 
-              {/* AI-Assisted Suggestion Card */}
-              {aiResult && !isAnalyzing && (
-                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
-                      <Sparkles className="w-4 h-4 text-emerald-600" />
-                      AI-Assisted Suggestion (Editable)
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-950 text-[10px] font-extrabold">
-                      {Math.round(aiResult.confidence * 100)}% Confidence
-                    </span>
+              {/* Anti-spam warning if detected */}
+              {antiSpamWarning && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-[10px] text-xs text-amber-900 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block font-semibold">Proximity Notice</strong>
+                    <span>{antiSpamWarning}</span>
                   </div>
-                  <p className="text-xs text-slate-700 italic">"{aiResult.reasoningSummary}"</p>
                 </div>
               )}
 
-              {/* Waste Category Selection (10 items) */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-800 block">Select Waste Category</label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {WASTE_CATEGORIES.slice(0, 9).map((cat) => (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setCategory(cat.id)}
-                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                        category === cat.id
-                          ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-500/20'
-                          : 'border-slate-200 hover:border-slate-300 bg-white'
-                      }`}
-                    >
-                      <strong className="text-xs text-slate-900 block truncate">{cat.label}</strong>
-                      <span className="text-[10px] text-slate-500 line-clamp-1">{cat.description}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Severity Selection */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-800 block">How serious is the issue?</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {[
-                    { id: 'low', label: '🟢 Low', desc: 'Small amount of waste' },
-                    { id: 'medium', label: '🟡 Medium', desc: 'Visible accumulation' },
-                    { id: 'high', label: '🟠 High', desc: 'Large pile / blocking area' },
-                    { id: 'critical', label: '🔴 Critical', desc: 'Hazardous / severe obstruction' },
-                  ].map((sev) => (
-                    <button
-                      key={sev.id}
-                      type="button"
-                      onClick={() => setSeverity(sev.id as SeverityLevel)}
-                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                        severity === sev.id
-                          ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-500/20'
-                          : 'border-slate-200 hover:border-slate-300 bg-white'
-                      }`}
-                    >
-                      <strong className="text-xs text-slate-900 block">{sev.label}</strong>
-                      <span className="text-[10px] text-slate-500 block leading-tight">{sev.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Navigation */}
-              <div className="flex justify-between pt-2">
-                <button
-                  onClick={() => setStep(1)}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-50 cursor-pointer"
-                >
-                  Change Photo
-                </button>
-                <button
-                  onClick={() => setStep(3)}
-                  disabled={isAnalyzing}
-                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer disabled:opacity-50"
-                >
-                  Confirm & Pin Location →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 3: LOCATION CAPTURE */}
-          {step === 3 && (
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Where is the waste?</h3>
-                  <p className="text-xs text-slate-500">
-                    Use browser GPS or click on the map to place the incident pin
-                  </p>
-                </div>
+              {/* Location Actions */}
+              <div className="flex flex-col sm:flex-row gap-2.5">
                 <button
                   type="button"
                   onClick={handleGetLocation}
                   disabled={isLocating}
-                  className="px-3 py-1.5 text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="touch-target flex-1 py-2.5 px-4 bg-[#176B45] hover:bg-[#0E4D32] text-white font-medium text-xs sm:text-sm rounded-[8px] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  <Navigation className="w-3.5 h-3.5" />
-                  <span>{isLocating ? 'Locating...' : 'Use My Current Location'}</span>
+                  <MapPin className="w-4 h-4" />
+                  <span>{isLocating ? 'Locating...' : 'Use my current location'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setLocationConfirmed(true)}
+                  className="touch-target py-2.5 px-4 bg-white hover:bg-slate-50 border border-[#E2E8E4] text-[#17201B] font-medium text-xs sm:text-sm rounded-[8px] cursor-pointer"
+                >
+                  Place pin manually
                 </button>
               </div>
 
-              {locationError && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>{locationError}</span>
+              {/* Permission Denied Friendly Fallback */}
+              {locationPermissionDenied && (
+                <div className="p-3 bg-[#E8F5EE] border border-[#3FA66B]/40 rounded-[10px] text-xs text-[#0E4D32] space-y-1">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <Info className="w-4 h-4 text-[#176B45]" />
+                    <span>Location access unavailable.</span>
+                  </div>
+                  <p>You can drag the pin on the map or type a landmark address below.</p>
                 </div>
               )}
 
-              {/* Interactive Map Pin Picker */}
-              <InteractiveMap
-                height="280px"
-                isPickerMode={true}
-                pickedPosition={[location.latitude, location.longitude]}
-                onPickPosition={(lat, lng) => {
-                  setLocation((prev) => ({
-                    ...prev,
-                    latitude: Number(lat.toFixed(6)),
-                    longitude: Number(lng.toFixed(6)),
-                    formattedAddress: `Street at Coordinates ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-                    approximateLocation: `Municipal Sector (${lat.toFixed(2)}, ${lng.toFixed(2)})`,
-                  }));
-                }}
-              />
+              {/* Interactive Map Pin */}
+              <div className="space-y-2">
+                <InteractiveMap
+                  height="260px"
+                  isPickerMode={true}
+                  pickedPosition={[location.latitude, location.longitude]}
+                  onPickPosition={(lat, lng) => {
+                    setLocation((prev) => ({
+                      ...prev,
+                      latitude: Number(lat.toFixed(6)),
+                      longitude: Number(lng.toFixed(6)),
+                      formattedAddress: `Street at Coordinates ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+                      approximateLocation: `Sector (${lat.toFixed(2)}, ${lng.toFixed(2)})`,
+                    }));
+                    setLocationConfirmed(true);
+                  }}
+                />
+                <span className="text-[11px] text-[#657169] block">
+                  Tap anywhere on the map or drag the pin to pin the exact problem location.
+                </span>
+              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Human-Readable Address</label>
-                  <input
-                    type="text"
-                    value={location.formattedAddress}
-                    onChange={(e) => setLocation((prev) => ({ ...prev, formattedAddress: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Landmark / Access Guide</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Near Metro Station Gate 2"
-                    value={landmark}
-                    onChange={(e) => setLandmark(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-                  />
-                </div>
+              {/* Confirmed Address Input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-[#17201B]">
+                  Confirmed Street Address / Locality
+                </label>
+                <input
+                  type="text"
+                  value={location.formattedAddress}
+                  onChange={(e) => setLocation((prev) => ({ ...prev, formattedAddress: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 rounded-[10px] border border-[#E2E8E4] text-xs font-medium focus:ring-2 focus:ring-[#176B45]"
+                />
               </div>
 
               <div className="flex justify-between pt-2">
                 <button
-                  onClick={() => setStep(2)}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-50 cursor-pointer"
+                  type="button"
+                  onClick={() => setReportStep(2)}
+                  className="px-4 py-2 text-xs font-semibold text-[#657169] hover:text-[#17201B] cursor-pointer"
                 >
-                  ← Back to Details
+                  ← Back to Photo
                 </button>
                 <button
-                  onClick={() => setStep(4)}
-                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer"
+                  type="button"
+                  onClick={() => setReportStep(4)}
+                  className="px-6 py-2.5 bg-[#176B45] hover:bg-[#0E4D32] text-white text-xs font-semibold rounded-[8px] shadow-xs cursor-pointer"
                 >
-                  Review Summary →
+                  Select Category →
                 </button>
               </div>
             </div>
           )}
 
-          {/* STEP 4: CONFIRMATION CARD & SUBMIT */}
-          {step === 4 && (
+          {/* STEP 4: SELECT CATEGORY */}
+          {reportStep === 4 && (
             <div className="space-y-5">
-              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
-                <h4 className="font-bold text-slate-900 text-sm border-b border-slate-200 pb-2">
-                  Review Report Card
-                </h4>
+              <div className="space-y-1">
+                <h3 className="font-semibold text-base text-[#17201B]">Select Waste Category</h3>
+                <p className="text-xs text-[#657169]">
+                  Classify the type of waste to route to the proper sanitation equipment.
+                </p>
+              </div>
 
-                <div className="flex gap-4">
-                  <div className="w-24 h-24 rounded-2xl overflow-hidden bg-slate-200 shrink-0">
-                    <img src={selectedImage} alt="Thumbnail" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="space-y-1 text-xs">
-                    <div>
-                      <span className="text-slate-400">Category: </span>
-                      <strong className="text-slate-900">{getCategoryInfo(category).label}</strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-400">Severity: </span>
-                      <span className="font-bold uppercase text-red-600">{severity}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400">Location: </span>
-                      <span className="text-slate-700 font-medium">{location.formattedAddress}</span>
-                    </div>
-                    {landmark && (
-                      <div>
-                        <span className="text-slate-400">Landmark: </span>
-                        <span className="text-slate-700">{landmark}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {[
+                  { id: 'overflowing_bin', label: 'Overflowing Bin', desc: 'Street bin full' },
+                  { id: 'illegal_dumping', label: 'Illegal Dumping', desc: 'Fly-tipping lot' },
+                  { id: 'plastic_waste', label: 'Plastic Waste', desc: 'Bottles / polymers' },
+                  { id: 'construction_debris', label: 'Construction Waste', desc: 'Rubble / tiles' },
+                  { id: 'e_waste', label: 'E-Waste', desc: 'Cables / appliances' },
+                  { id: 'organic_waste', label: 'Organic Waste', desc: 'Food / market refuse' },
+                  { id: 'roadside_garbage', label: 'Roadside Waste', desc: 'Litter on footpath' },
+                  { id: 'other', label: 'Other', desc: 'Mixed general waste' },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setCategory(cat.id as WasteCategory)}
+                    className={`p-3 rounded-[10px] border text-left transition-all cursor-pointer ${
+                      category === cat.id
+                        ? 'bg-[#E8F5EE] border-[#176B45] ring-2 ring-[#176B45]/20 shadow-xs'
+                        : 'border-[#E2E8E4] hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <strong className="text-xs text-[#17201B] block truncate">{cat.label}</strong>
+                    <span className="text-[10px] text-[#657169] block mt-0.5">{cat.desc}</span>
+                  </button>
+                ))}
+              </div>
 
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <label className="font-bold text-slate-700">Anything else we should know?</label>
-                    <span className="text-[10px] text-slate-400">{description.length}/300</span>
-                  </div>
-                  <textarea
-                    rows={2}
-                    maxLength={300}
-                    placeholder="e.g. Garbage has been here for 2 days and is blocking the footpath."
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-                  />
-                </div>
+              {/* Optional details & landmarks */}
+              <div className="space-y-2 pt-2 border-t border-[#E2E8E4]">
+                <label className="text-xs font-semibold text-[#17201B]">
+                  Nearby Landmark or Note (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Opposite Bus Stop #12, near corner bakery"
+                  value={landmark}
+                  onChange={(e) => setLandmark(e.target.value)}
+                  className="w-full px-3 py-2 rounded-[8px] border border-[#E2E8E4] text-xs"
+                />
               </div>
 
               <div className="flex justify-between pt-2">
                 <button
-                  onClick={() => setStep(3)}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-50 cursor-pointer"
+                  type="button"
+                  onClick={() => setReportStep(3)}
+                  className="px-4 py-2 text-xs font-semibold text-[#657169] hover:text-[#17201B] cursor-pointer"
                 >
-                  ← Edit Location
+                  ← Back to Location
                 </button>
                 <button
-                  onClick={handleSubmitReport}
-                  className="px-7 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs rounded-2xl shadow-md cursor-pointer flex items-center gap-2"
+                  type="button"
+                  onClick={() => setReportStep(5)}
+                  className="px-6 py-2.5 bg-[#176B45] hover:bg-[#0E4D32] text-white text-xs font-semibold rounded-[8px] shadow-xs cursor-pointer"
                 >
-                  <Check className="w-4 h-4" />
-                  <span>Submit Report (Get ID)</span>
+                  Select Severity →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 5: SELECT SEVERITY */}
+          {reportStep === 5 && (
+            <div className="space-y-5">
+              <div className="space-y-1">
+                <h3 className="font-semibold text-base text-[#17201B]">Select Severity</h3>
+                <p className="text-xs text-[#657169]">
+                  Indicate the accumulation size and urgency of response needed.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {[
+                  { id: 'low', label: 'Low', dot: 'bg-emerald-600', title: 'Small amount', desc: 'Isolated litter or bag' },
+                  { id: 'medium', label: 'Moderate', dot: 'bg-amber-500', title: 'Moderate pile', desc: 'Noticeable heap' },
+                  { id: 'high', label: 'High', dot: 'bg-orange-500', title: 'Large accumulation', desc: 'Spilling / blocking path' },
+                  { id: 'critical', label: 'Critical', dot: 'bg-red-600', title: 'Severe hazard', desc: 'Major health / drainage risk' },
+                ].map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setSeverity(s.id as SeverityLevel)}
+                    className={`p-3.5 rounded-[10px] border text-left transition-colors cursor-pointer ${
+                      severity === s.id
+                        ? 'bg-[#E8F5EE] border-[#176B45] ring-2 ring-[#176B45]/20 shadow-xs'
+                        : 'border-[#E2E8E4] hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <span className="text-xs font-semibold text-[#17201B] flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${s.dot}`}></span>
+                      {s.label}
+                    </span>
+                    <strong className="text-[11px] text-[#17201B] block mt-1.5">{s.title}</strong>
+                    <span className="text-[10px] text-[#657169] block leading-tight mt-0.5">{s.desc}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* AI suggestion indicator if available */}
+              {aiResult && (
+                <div className="p-3 bg-[#F7F9F7] rounded-[8px] border border-[#E2E8E4] text-xs text-[#657169] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-3.5 h-3.5 text-[#176B45]" />
+                    <span>AI Vision suggestion: {aiResult.primaryCategory} • {aiResult.severity}</span>
+                  </div>
+                  <span className="text-[10px] text-[#176B45] font-semibold">Matched</span>
+                </div>
+              )}
+
+              <div className="flex justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => setReportStep(4)}
+                  className="px-4 py-2 text-xs font-semibold text-[#657169] hover:text-[#17201B] cursor-pointer"
+                >
+                  ← Back to Category
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReportStep(6)}
+                  className="px-6 py-2.5 bg-[#176B45] hover:bg-[#0E4D32] text-white text-xs font-semibold rounded-[8px] shadow-xs cursor-pointer"
+                >
+                  Review Report →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 6: REVIEW & SUBMIT */}
+          {reportStep === 6 && (
+            <div className="space-y-5">
+              <div className="space-y-1">
+                <h3 className="font-semibold text-base text-[#17201B]">Review Report Card</h3>
+                <p className="text-xs text-[#657169]">
+                  Confirm details before dispatching to local municipal teams.
+                </p>
+              </div>
+
+              {/* Review Card */}
+              <div className="p-4 bg-[#F7F9F7] rounded-[14px] border border-[#E2E8E4] space-y-3">
+                {/* Photo */}
+                <div className="flex items-center justify-between pb-3 border-b border-[#E2E8E4]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-[8px] overflow-hidden bg-slate-200 shrink-0">
+                      <img src={selectedImage} alt="Preview" className="w-full h-full object-cover" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-[#657169] uppercase font-bold">Photo Evidence</span>
+                      <strong className="text-xs text-[#17201B] block">Clear image attached</strong>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setReportStep(2)}
+                    className="text-xs text-[#176B45] font-semibold hover:underline cursor-pointer"
+                  >
+                    Edit
+                  </button>
+                </div>
+
+                {/* Location */}
+                <div className="flex items-center justify-between pb-3 border-b border-[#E2E8E4] text-xs">
+                  <div>
+                    <span className="text-[10px] text-[#657169] uppercase font-bold">Location</span>
+                    <strong className="text-[#17201B] block">{location.formattedAddress}</strong>
+                    {landmark && <p className="text-[#657169] text-[11px]">Landmark: {landmark}</p>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setReportStep(3)}
+                    className="text-xs text-[#176B45] font-semibold hover:underline cursor-pointer"
+                  >
+                    Edit
+                  </button>
+                </div>
+
+                {/* Category & Severity */}
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-[10px] text-[#657169] uppercase font-bold">Category</span>
+                    <strong className="text-[#17201B] block">{getCategoryInfo(category).label}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#657169] uppercase font-bold">Severity</span>
+                    <strong className="uppercase text-[#17201B] font-bold block">{severity}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Estimated Civic Reward Box */}
+              <div className="bg-[#E8F5EE] rounded-[12px] border border-[#CBE5D7] p-3.5 flex items-center justify-between text-xs">
+                <div>
+                  <span className="font-bold text-[#0E4D32] flex items-center gap-1.5">
+                    <Award className="w-4 h-4 text-[#176B45]" />
+                    Estimated Civic Points for this Report:
+                  </span>
+                  <span className="text-[11px] text-[#285A43] block mt-0.5">
+                    +50 Valid report • +20 Useful photo • +15 Geotag accuracy
+                  </span>
+                </div>
+                <div className="text-lg font-bold text-[#176B45]">+85 pts</div>
+              </div>
+
+              <div className="flex justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => setReportStep(5)}
+                  className="px-4 py-2 text-xs font-semibold text-[#657169] hover:text-[#17201B] cursor-pointer"
+                >
+                  ← Edit Severity
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitReport}
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 bg-[#176B45] hover:bg-[#0E4D32] text-white font-semibold text-xs sm:text-sm rounded-[8px] cursor-pointer flex items-center gap-2 shadow-xs disabled:opacity-50"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Validating report…</span>
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <Check className="w-4 h-4" />
+                      <span>Submit Report (+85 pts)</span>
+                    </div>
+                  )}
                 </button>
               </div>
             </div>
@@ -675,376 +993,478 @@ export const CitizenView: React.FC<CitizenViewProps> = ({
         </div>
       )}
 
-      {/* TAB 2: EXPLORE WASTE MAP */}
+      {/* SUCCESS SCREEN AFTER REPORT */}
+      {submittedReport && (
+        <div className="max-w-xl mx-auto bg-white rounded-[20px] border border-[#E2E8E4] p-6 sm:p-8 shadow-xs space-y-6 text-center animate-in fade-in duration-200">
+          <div className="w-16 h-16 rounded-full bg-[#E8F5EE] text-[#176B45] flex items-center justify-center mx-auto shadow-xs border border-[#CBE5D7]">
+            <Check className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-1">
+            <h2 className="font-bold text-xl text-[#17201B]">Report Submitted</h2>
+            <p className="text-xs text-[#657169]">
+              Your report has been queued for municipal verification.
+            </p>
+          </div>
+
+          <div className="p-4 bg-[#F7F9F7] rounded-[14px] border border-[#E2E8E4] space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[#657169]">Ticket Number:</span>
+              <div className="flex items-center gap-1.5 font-mono font-bold text-[#17201B]">
+                <span>{submittedReport.id}</span>
+                <button
+                  onClick={() => handleCopyId(submittedReport.id)}
+                  className="p-1 hover:bg-slate-200 rounded cursor-pointer"
+                  title="Copy ID"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+            {copiedId && <span className="text-[10px] text-[#176B45] font-semibold block text-right">Copied!</span>}
+
+            <div className="flex items-center justify-between pt-1 border-t border-[#E2E8E4]">
+              <span className="text-[#657169]">Location:</span>
+              <span className="font-medium text-[#17201B] truncate max-w-[240px]">
+                {submittedReport.location.formattedAddress}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 border-t border-[#E2E8E4]">
+              <span className="text-[#657169]">Status:</span>
+              <span className="font-bold text-[#176B45] uppercase">
+                {submittedReport.status}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2.5 justify-center">
+            <button
+              onClick={() => {
+                setSubmittedReport(null);
+                setActiveTab('my-reports');
+              }}
+              className="py-2.5 px-5 bg-[#176B45] hover:bg-[#0E4D32] text-white font-semibold text-xs rounded-[8px] cursor-pointer shadow-xs"
+            >
+              Track Report
+            </button>
+            <button
+              onClick={() => {
+                setSubmittedReport(null);
+                setActiveTab('nearby');
+              }}
+              className="py-2.5 px-5 bg-white hover:bg-slate-50 border border-[#E2E8E4] text-[#17201B] font-semibold text-xs rounded-[8px] cursor-pointer"
+            >
+              View on Map
+            </button>
+            <button
+              onClick={() => setSubmittedReport(null)}
+              className="py-2.5 px-4 text-[#657169] hover:text-[#17201B] text-xs font-semibold cursor-pointer"
+            >
+              Report Another
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: CIVIC PROFILE & IMPACT DASHBOARD */}
+      {activeTab === 'profile' && (
+        <GamificationDashboard
+          profile={userProfile}
+          onRefreshProfile={refreshProfile}
+          onNavigateToTab={(tab) => {
+            if (tab === 'map') setActiveTab('nearby');
+            if (tab === 'track') setActiveTab('my-reports');
+            if (tab === 'report') {
+              setActiveTab('report');
+              setReportStep(1);
+            }
+          }}
+        />
+      )}
+
+      {/* TAB 3: COMMUNITY LEADERS LEADERBOARD */}
+      {activeTab === 'leaderboard' && (
+        <LeaderboardView
+          profile={userProfile}
+          onRefreshProfile={refreshProfile}
+        />
+      )}
+
+      {/* TAB 4: COMMUNITY MAP (WITH MAP GAMIFICATION EXPLORE LAYER) */}
       {activeTab === 'nearby' && (
-        <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-7 shadow-xs space-y-5">
+        <div className="bg-white rounded-[20px] border border-[#E2E8E4] p-5 sm:p-7 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Explore Waste Map</h2>
-              <p className="text-xs text-slate-500">
-                Explore active community waste markers and vote on current status
+              <h2 className="text-xl font-bold text-[#17201B]">Community Waste Map</h2>
+              <p className="text-xs text-[#657169]">
+                Browse community reports, view recurring hotspots, and verify active issues
               </p>
             </div>
 
-            {/* Unresolved Only Toggle */}
-            <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-              <input
-                type="checkbox"
-                checked={unresolvedOnly}
-                onChange={(e) => setUnresolvedOnly(e.target.checked)}
-                className="rounded text-emerald-600 focus:ring-emerald-500"
-              />
-              <span>Show Only Unresolved Reports</span>
-            </label>
+            {/* View Mode Switcher */}
+            <div className="flex items-center gap-2">
+              <div className="flex bg-[#F7F9F7] p-1 rounded-[8px] border border-[#E2E8E4]">
+                <button
+                  onClick={() => setMapDisplayMode('map')}
+                  className={`px-3 py-1 rounded-[6px] text-xs font-semibold flex items-center gap-1 cursor-pointer ${
+                    mapDisplayMode === 'map' ? 'bg-white text-[#176B45] shadow-xs' : 'text-[#657169]'
+                  }`}
+                >
+                  <MapIcon className="w-3.5 h-3.5" />
+                  <span>Map</span>
+                </button>
+                <button
+                  onClick={() => setMapDisplayMode('list')}
+                  className={`px-3 py-1 rounded-[6px] text-xs font-semibold flex items-center gap-1 cursor-pointer ${
+                    mapDisplayMode === 'list' ? 'bg-white text-[#176B45] shadow-xs' : 'text-[#657169]'
+                  }`}
+                >
+                  <List className="w-3.5 h-3.5" />
+                  <span>List</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* MAP GAMIFICATION: "EXPLORE YOUR AREA" SUMMARY LAYER (Section 14) */}
+          <div className="p-3.5 bg-[#F7F9F7] rounded-[12px] border border-[#E2E8E4] flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-[#17201B] flex items-center gap-1.5">
+                <MapPin className="w-4 h-4 text-[#176B45]" />
+                Explore Ward 4:
+              </span>
+              <span className="text-[#657169]">{nearbyCount} reported issues near you</span>
+              <span className="text-slate-300">•</span>
+              <span className="text-[#176B45] font-semibold">{resolvedThisWeek} issues resolved this week</span>
+              <span className="text-slate-300">•</span>
+              <span className="text-[#C45511] font-semibold">{recurringHotspotsCount} recurring hotspots</span>
+            </div>
+
+            <div className="text-[11px] text-[#657169] bg-white px-2.5 py-1 rounded-[6px] border border-[#E2E8E4]">
+              Earn <strong>+15 Civic Points</strong> for verifying issues
+            </div>
           </div>
 
           {/* Filter Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
-            <select
-              value={mapStatusFilter}
-              onChange={(e) => setMapStatusFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-slate-200 font-semibold focus:ring-2 focus:ring-emerald-500"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="SUBMITTED">Submitted</option>
-              <option value="VERIFIED">Verified</option>
-              <option value="ASSIGNED">Assigned</option>
-              <option value="IN_PROGRESS">In Progress</option>
-              <option value="RESOLVED">Resolved</option>
-            </select>
-
-            <select
-              value={mapSeverityFilter}
-              onChange={(e) => setMapSeverityFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-slate-200 font-semibold focus:ring-2 focus:ring-emerald-500"
-            >
-              <option value="ALL">All Severities</option>
-              <option value="critical">🔴 Critical</option>
-              <option value="high">🟠 High</option>
-              <option value="medium">🟡 Medium</option>
-              <option value="low">🟢 Low</option>
-            </select>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
+            <input
+              type="text"
+              placeholder="Search an area, street, or landmark…"
+              value={mapSearch}
+              onChange={(e) => setMapSearch(e.target.value)}
+              className="px-3 py-2 rounded-[8px] border border-[#E2E8E4] focus:ring-2 focus:ring-[#176B45]"
+            />
 
             <select
               value={mapCategoryFilter}
               onChange={(e) => setMapCategoryFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-slate-200 font-semibold focus:ring-2 focus:ring-emerald-500"
+              className="px-3 py-2 rounded-[8px] border border-[#E2E8E4] font-medium"
             >
-              <option value="ALL">All Waste Types</option>
+              <option value="ALL">All Categories</option>
               {WASTE_CATEGORIES.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.label}
                 </option>
               ))}
             </select>
-          </div>
 
-          <InteractiveMap
-            reports={filteredMapReports}
-            height="520px"
-            onSelectReport={(r) => setInspectReport(r)}
-            onCommunityVote={handleVote}
-          />
-        </div>
-      )}
+            <select
+              value={mapSeverityFilter}
+              onChange={(e) => setMapSeverityFilter(e.target.value)}
+              className="px-3 py-2 rounded-[8px] border border-[#E2E8E4] font-medium"
+            >
+              <option value="ALL">All Severities</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
 
-      {/* TAB 3: TRACK MY REPORTS */}
-      {activeTab === 'my-reports' && (
-        <div className="space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                Track My Reports ({myReports.length})
-              </h2>
-              <p className="text-xs text-slate-500">Live lifecycle tracking from dispatch to closure</p>
-            </div>
-
-            {/* Quick Search by Report ID */}
-            <div className="flex gap-2">
+            <label className="flex items-center gap-2 font-semibold text-[#17201B] cursor-pointer bg-[#F7F9F7] px-3 py-2 rounded-[8px] border border-[#E2E8E4]">
               <input
-                type="text"
-                placeholder="Search ID (e.g. CS-2026-000181)"
-                value={searchTrackingId}
-                onChange={(e) => setSearchTrackingId(e.target.value)}
-                className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono"
+                type="checkbox"
+                checked={unresolvedOnly}
+                onChange={(e) => setUnresolvedOnly(e.target.checked)}
+                className="rounded text-[#176B45] focus:ring-[#176B45]"
               />
-              <button
-                onClick={() => {
-                  const found = reports.find(
-                    (r) => r.id.toLowerCase() === searchTrackingId.trim().toLowerCase()
-                  );
-                  if (found) setInspectReport(found);
-                  else alert('Report ID not found');
-                }}
-                className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-bold"
-              >
-                Find
-              </button>
-            </div>
+              <span className="truncate">Unresolved only</span>
+            </label>
           </div>
 
-          {myReports.length === 0 ? (
-            <div className="p-10 text-center bg-white rounded-3xl border border-slate-200 space-y-3">
-              <Trash2 className="w-8 h-8 text-slate-300 mx-auto" />
-              <h4 className="font-bold text-slate-800 text-sm">You haven't reported anything yet</h4>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Spotted an overflowing public bin or fly-tipping? Help keep your community clean in under 30 seconds!
-              </p>
-              <button
-                onClick={() => {
-                  setActiveTab('report');
-                  setStep(1);
-                }}
-                className="px-5 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl cursor-pointer"
-              >
-                Report First Issue
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {myReports.map((report) => {
-                const catInfo = getCategoryInfo(report.category);
-                const isPendingConfirmation = report.status === 'RESOLVED_PENDING_CONFIRMATION';
+          {/* MAP DISPLAY MODE */}
+          {mapDisplayMode === 'map' && (
+            <InteractiveMap
+              reports={filteredMapReports}
+              height="520px"
+              onSelectReport={(r) => setInspectReport(r)}
+              onCommunityVote={handleVote}
+            />
+          )}
 
-                return (
-                  <div
-                    key={report.id}
-                    className={`p-4 rounded-3xl border bg-white shadow-xs space-y-3 transition-all ${
-                      isPendingConfirmation
-                        ? 'border-amber-400 ring-2 ring-amber-400/20'
-                        : 'border-slate-200 hover:border-emerald-300'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
+          {/* ACCESSIBLE LIST MODE */}
+          {mapDisplayMode === 'list' && (
+            <div className="divide-y divide-[#E2E8E4] max-h-[550px] overflow-y-auto">
+              {filteredMapReports.length === 0 ? (
+                <div className="p-8 text-center text-xs text-[#657169]">
+                  No reports match the current filters.
+                </div>
+              ) : (
+                filteredMapReports.map((report) => {
+                  const catInfo = getCategoryInfo(report.category);
+                  return (
+                    <div
+                      key={report.id}
+                      className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between gap-4 cursor-pointer text-xs"
+                      onClick={() => setInspectReport(report)}
+                    >
                       <div className="flex items-center gap-3">
-                        <div className="w-14 h-14 rounded-2xl overflow-hidden bg-slate-100 shrink-0">
-                          <img
-                            src={report.imageUrls[0]}
-                            alt={catInfo.label}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
+                        <img
+                          src={report.imageUrls[0]}
+                          alt="Incident"
+                          className="w-12 h-12 rounded-[8px] object-cover shrink-0 bg-slate-100"
+                        />
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-xs text-slate-900">{report.id}</span>
-                            <span className="text-[10px] px-2 py-0.5 rounded-full font-extrabold uppercase bg-slate-100 text-slate-700">
-                              {report.priority}
-                            </span>
+                            <span className="font-bold text-[#17201B]">{report.id}</span>
+                            <span className="font-semibold text-[#657169]">• {catInfo.label}</span>
                           </div>
-                          <h4 className="font-bold text-xs text-slate-800 line-clamp-1">{catInfo.label}</h4>
-                          <span className="text-[11px] text-slate-400">
-                            {new Date(report.createdAt).toLocaleDateString()}
-                          </span>
+                          <p className="text-[11px] text-[#657169] line-clamp-1">
+                            {report.location.formattedAddress}
+                          </p>
                         </div>
                       </div>
 
-                      <span
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          report.status === 'RESOLVED'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : isPendingConfirmation
-                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                            : report.status === 'IN_PROGRESS'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-slate-100 text-slate-800'
-                        }`}
-                      >
-                        {report.status.replace(/_/g, ' ')}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-slate-600 line-clamp-2">{report.description}</p>
-
-                    {/* Pending Citizen Confirmation Banner */}
-                    {isPendingConfirmation && (
-                      <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 space-y-2">
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
-                          <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Sanitation crew completed work! Confirm resolution:</span>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleCitizenVerify(report.id, 'YES')}
-                            className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center justify-center gap-1"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            Yes, Verified Clean
-                          </button>
-                          <button
-                            onClick={() => handleCitizenVerify(report.id, 'NO')}
-                            className="flex-1 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center justify-center gap-1"
-                          >
-                            <RotateCcw className="w-3.5 h-3.5" />
-                            No, Still Present
-                          </button>
-                        </div>
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`px-2 py-0.5 rounded-[4px] text-[10px] font-bold uppercase ${
+                            report.status === 'RESOLVED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {report.status.replace(/_/g, ' ')}
+                        </span>
+                        <ChevronRight className="w-4 h-4 text-slate-400" />
                       </div>
-                    )}
-
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                      <span className="text-slate-500 text-[11px] truncate max-w-[200px]">
-                        📍 {report.location.formattedAddress}
-                      </span>
-                      <button
-                        onClick={() => setInspectReport(report)}
-                        className="text-emerald-700 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        Inspect Details
-                      </button>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           )}
         </div>
       )}
 
-      {/* DETAIL MODAL: TIMELINE, BEFORE/AFTER PROOF */}
-      {inspectReport && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-y-auto p-6 sm:p-7 space-y-5 shadow-2xl border border-slate-200 animate-in fade-in duration-200">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-mono font-bold text-slate-900 text-base">{inspectReport.id}</h3>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full font-bold uppercase bg-emerald-100 text-emerald-900">
-                    {inspectReport.status.replace(/_/g, ' ')}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500">{inspectReport.location.formattedAddress}</p>
-              </div>
+      {/* TAB 5: MY REPORTS & TRACKING (LIFECYCLE + CIVIC REWARD HISTORY) */}
+      {activeTab === 'my-reports' && (
+        <div className="bg-white rounded-[20px] border border-[#E2E8E4] p-5 sm:p-7 shadow-xs space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-[#17201B]">My Submitted Reports</h2>
+              <p className="text-xs text-[#657169]">
+                Track the status and civic points earned across each report lifecycle.
+              </p>
+            </div>
+
+            <div className="flex bg-[#F7F9F7] p-1 rounded-[8px] border border-[#E2E8E4] text-xs font-semibold">
               <button
-                onClick={() => setInspectReport(null)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                onClick={() => setMyReportsSubTab('all')}
+                className={`px-3 py-1 rounded-[6px] cursor-pointer ${
+                  myReportsSubTab === 'all' ? 'bg-white text-[#176B45] shadow-xs' : 'text-[#657169]'
+                }`}
               >
-                <X className="w-5 h-5" />
+                All ({myReports.length})
+              </button>
+              <button
+                onClick={() => setMyReportsSubTab('active')}
+                className={`px-3 py-1 rounded-[6px] cursor-pointer ${
+                  myReportsSubTab === 'active' ? 'bg-white text-[#176B45] shadow-xs' : 'text-[#657169]'
+                }`}
+              >
+                Active
+              </button>
+              <button
+                onClick={() => setMyReportsSubTab('resolved')}
+                className={`px-3 py-1 rounded-[6px] cursor-pointer ${
+                  myReportsSubTab === 'resolved' ? 'bg-white text-[#176B45] shadow-xs' : 'text-[#657169]'
+                }`}
+              >
+                Resolved
               </button>
             </div>
+          </div>
 
-            {/* Before vs After Visual Proof Comparison */}
-            {inspectReport.evidence.length > 0 && (
-              <div className="space-y-2 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
-                  Remediation Photographic Evidence
-                </span>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-500 block mb-1">
-                      BEFORE (Citizen Evidence)
-                    </span>
-                    <div className="aspect-video rounded-xl overflow-hidden bg-slate-200">
-                      <img
-                        src={inspectReport.imageUrls[0]}
-                        alt="Before"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  </div>
-
-                  {inspectReport.evidence.find((e) => e.type === 'AFTER') ? (
-                    <div>
-                      <span className="text-[11px] font-bold text-emerald-700 block mb-1">
-                        AFTER (Cleanup Crew)
-                      </span>
-                      <div className="aspect-video rounded-xl overflow-hidden bg-slate-200">
-                        <img
-                          src={inspectReport.evidence.find((e) => e.type === 'AFTER')?.imageUrl}
-                          alt="After"
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="aspect-video rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center text-center p-3 text-slate-400 text-xs">
-                      Cleanup in progress... After photo will appear here.
-                    </div>
-                  )}
-                </div>
-
-                {inspectReport.evidence.find((e) => e.type === 'AFTER')?.aiVerificationSummary && (
-                  <div className="p-2.5 bg-emerald-100/70 rounded-xl text-xs text-emerald-950 font-medium">
-                    <span className="font-bold">AI Clearance Check: </span>
-                    {inspectReport.evidence.find((e) => e.type === 'AFTER')?.aiVerificationSummary}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Full Status Timeline */}
-            <div className="space-y-3">
-              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
-                Report Status Timeline
-              </span>
-              <div className="space-y-3 pl-2 border-l-2 border-emerald-500">
-                {inspectReport.statusHistory.map((sh, idx) => (
-                  <div key={idx} className="relative pl-4 space-y-0.5">
-                    <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-600 ring-4 ring-white" />
-                    <div className="flex items-center gap-2 text-xs">
-                      <strong className="text-slate-900">{sh.toStatus.replace(/_/g, ' ')}</strong>
-                      <span className="text-[10px] text-slate-400">
-                        {new Date(sh.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-600">
-                      By {sh.changedBy} ({sh.actorRole}): {sh.reason || 'Status milestone updated'}
-                    </p>
-                  </div>
-                ))}
-              </div>
+          {/* REPORT LIFECYCLE EXPLAINER */}
+          <div className="p-3 bg-[#F7F9F7] rounded-[10px] border border-[#E2E8E4] text-xs text-[#657169]">
+            <strong className="text-[#17201B] block mb-1">Civic Report Lifecycle:</strong>
+            <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+              <span className="font-semibold text-[#176B45]">Submitted (+85 pts)</span>
+              <span>→</span>
+              <span>Under Review</span>
+              <span>→</span>
+              <span className="font-semibold text-[#176B45]">Verified (+40 pts)</span>
+              <span>→</span>
+              <span>Assigned</span>
+              <span>→</span>
+              <span>Cleanup Started</span>
+              <span>→</span>
+              <span className="font-semibold text-[#176B45]">Resolved (+50 pts)</span>
+              <span>→</span>
+              <span>Closed</span>
             </div>
+          </div>
 
-            {/* Verification action inside modal */}
-            {inspectReport.status === 'RESOLVED_PENDING_CONFIRMATION' && (
-              <div className="pt-3 border-t border-slate-100 flex gap-3">
-                <button
-                  onClick={() => handleCitizenVerify(inspectReport.id, 'YES')}
-                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer"
-                >
-                  Confirm Resolved (100% Fixed)
-                </button>
-                <button
-                  onClick={() => handleCitizenVerify(inspectReport.id, 'NO')}
-                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer"
-                >
-                  Issue Still Present (Reopen)
-                </button>
+          {/* List of personal reports */}
+          <div className="divide-y divide-[#E2E8E4]">
+            {filteredMyReports.length === 0 ? (
+              <div className="p-8 text-center text-xs text-[#657169]">
+                No reports submitted yet in this category.
               </div>
+            ) : (
+              filteredMyReports.map((report) => (
+                <div
+                  key={report.id}
+                  onClick={() => setInspectReport(report)}
+                  className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between gap-4 cursor-pointer text-xs"
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={report.imageUrls[0]}
+                      alt="Thumbnail"
+                      className="w-12 h-12 rounded-[8px] object-cover shrink-0"
+                    />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-[#17201B]">{report.id}</span>
+                        <span className="font-medium text-[#657169]">• {getCategoryInfo(report.category).label}</span>
+                      </div>
+                      <p className="text-[11px] text-[#657169] line-clamp-1">{report.location.formattedAddress}</p>
+                      <span className="text-[10px] text-[#8D9B91]">
+                        Reported on {new Date(report.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-right">
+                    <div>
+                      <span
+                        className={`px-2 py-0.5 rounded-[4px] text-[10px] font-bold uppercase inline-block ${
+                          report.status === 'RESOLVED'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {report.status.replace(/_/g, ' ')}
+                      </span>
+                      <span className="text-[10px] text-[#176B45] font-semibold block mt-1">
+                        {report.status === 'RESOLVED' ? '+175 pts total' : '+85 pts earned'}
+                      </span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </div>
+                </div>
+              ))
             )}
           </div>
         </div>
       )}
 
-      {/* REOPEN MODAL */}
-      {reopenModalReport && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200">
-            <h4 className="font-extrabold text-slate-900 text-base">Reopen Report {reopenModalReport.id}</h4>
-            <p className="text-xs text-slate-600">
-              Please specify why this issue remains unresolved so sanitation supervisors can re-dispatch crews.
-            </p>
-            <textarea
-              rows={3}
-              placeholder="e.g. Worker cleared plastic bags but left sharp debris and rubble behind."
-              value={reopenReason}
-              onChange={(e) => setReopenReason(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-            />
-            <div className="flex justify-end gap-2 pt-2">
+      {/* INSPECT REPORT MODAL (WITH COMMUNITY VERIFICATION ACTION) */}
+      {inspectReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-[20px] border border-[#E2E8E4] shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E2E8E4]">
+              <div>
+                <span className="text-xs font-mono font-bold text-[#176B45]">{inspectReport.id}</span>
+                <h3 className="text-base font-bold text-[#17201B]">
+                  {getCategoryInfo(inspectReport.category).label}
+                </h3>
+              </div>
               <button
-                onClick={() => setReopenModalReport(null)}
-                className="px-3.5 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                onClick={() => setInspectReport(null)}
+                className="p-1 hover:bg-slate-100 rounded-[6px] text-slate-500 cursor-pointer"
               >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmReopen}
-                className="px-4 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl cursor-pointer"
-              >
-                Submit Reopen Request
+                <X className="w-4 h-4" />
               </button>
             </div>
+
+            {/* Photo preview */}
+            <div className="aspect-video w-full rounded-[12px] overflow-hidden bg-slate-100 relative">
+              <img
+                src={inspectReport.imageUrls[0]}
+                alt="Evidence"
+                className="w-full h-full object-cover"
+              />
+            </div>
+
+            {/* Details */}
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[#657169]">Approximate Location:</span>
+                <span className="font-semibold text-[#17201B]">
+                  {inspectReport.location.formattedAddress}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#657169]">Status:</span>
+                <span className="font-bold text-[#176B45] uppercase">
+                  {inspectReport.status.replace(/_/g, ' ')}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#657169]">Severity:</span>
+                <span className="font-bold uppercase text-[#17201B]">{inspectReport.severity}</span>
+              </div>
+            </div>
+
+            {/* COMMUNITY VERIFICATION SECTION (+15 Points) */}
+            <div className="p-3.5 bg-[#F7F9F7] rounded-[12px] border border-[#E2E8E4] space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <strong className="text-[#17201B] flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#176B45]" />
+                  Help Verify This Report
+                </strong>
+                <span className="text-[10px] font-bold text-[#176B45] bg-white px-2 py-0.5 rounded border border-[#CBE5D7]">
+                  +15 Civic Points
+                </span>
+              </div>
+              <p className="text-[11px] text-[#657169]">
+                Are you near this location? Provide a community confirmation signal:
+              </p>
+
+              <div className="grid grid-cols-3 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleVote(inspectReport.id, 'still_there')}
+                  className="py-1.5 px-2 bg-white hover:bg-slate-50 border border-[#E2E8E4] rounded-[6px] text-xs font-semibold text-[#17201B] cursor-pointer flex items-center justify-center gap-1"
+                >
+                  <ThumbsUp className="w-3 h-3 text-[#176B45]" /> Still There
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleVote(inspectReport.id, 'worsened')}
+                  className="py-1.5 px-2 bg-white hover:bg-slate-50 border border-[#E2E8E4] rounded-[6px] text-xs font-semibold text-orange-700 cursor-pointer flex items-center justify-center gap-1"
+                >
+                  <AlertTriangle className="w-3 h-3" /> Worsened
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleVote(inspectReport.id, 'cleaned')}
+                  className="py-1.5 px-2 bg-white hover:bg-slate-50 border border-[#E2E8E4] rounded-[6px] text-xs font-semibold text-[#176B45] cursor-pointer flex items-center justify-center gap-1"
+                >
+                  <Check className="w-3 h-3" /> Cleaned
+                </button>
+              </div>
+            </div>
+
+            {/* Close Button */}
+            <button
+              onClick={() => setInspectReport(null)}
+              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-[#17201B] font-semibold text-xs rounded-[8px] cursor-pointer"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

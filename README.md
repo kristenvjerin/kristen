@@ -1,12 +1,14 @@
-# CleanCity / WasteWatch — Smart Civic Waste Reporting & Intelligence Platform
+# CLEANSPOT — Smart Civic Waste Reporting & Intelligence Platform
 
-> **"Report. Verify. Resolve. Prevent."**
+> **“See it. Report it. Clean it.”**
 > 
-> A citizen-powered urban waste intelligence and response system that transforms real-world waste complaints into verified, geolocated, AI-assisted municipal actions — while using historical incident data to identify recurring hotspots and support preventive waste-management decisions.
+> *Citizen-Driven Waste Management & Smart City Cleanliness Platform*
+> 
+> Transforming everyday civic waste reporting into verified, geolocated, AI-assisted municipal actions — while leveraging recurrence analytics to identify recurring hotspots and drive preventive urban sanitation planning.
 
-**Primary SDGs:**
-- **SDG 11: Sustainable Cities and Communities (Target 11.6)**
-- **SDG 12: Responsible Consumption and Production (Target 12.5)**
+**Primary United Nations SDGs:**
+- **SDG 11: Sustainable Cities and Communities (Target 11.6)** — Reduce the adverse per capita environmental impact of cities, including by paying special attention to municipal waste management.
+- **SDG 12: Responsible Consumption and Production (Target 12.5)** — Substantially reduce waste generation through prevention, reduction, recycling, and reuse.
 
 ---
 

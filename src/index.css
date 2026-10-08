@@ -1,11 +1,150 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
 
+@theme {
+  --font-sans: 'Rajdhani', 'Chakra Petch', system-ui, -apple-system, sans-serif;
+  --font-game: 'Rajdhani', 'Chakra Petch', sans-serif;
+  --font-display: 'Orbitron', 'Chakra Petch', sans-serif;
+  --font-tactical: 'Chakra Petch', 'Rajdhani', sans-serif;
+  --font-pixel: 'Silkscreen', 'Press Start 2P', monospace;
+  --font-arcade: 'Press Start 2P', 'Silkscreen', monospace;
+}
+
+:root {
+  --color-primary: #176B45;
+  --color-primary-dark: #0E4D32;
+  --color-secondary: #3FA66B;
+  --color-light-green: #E8F5EE;
+  --color-background: #F7F9F7;
+  --color-surface: #FFFFFF;
+  --color-text: #17201B;
+  --color-text-secondary: #657169;
+  --color-text-muted: #8B9690;
+  --color-warning: #E7A52B;
+  --color-danger: #D64545;
+  --color-info: #3578C7;
+  --color-border: #E2E8E4;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-card: 18px;
+  --radius-container: 24px;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-text);
+  font-family: 'Rajdhani', 'Chakra Petch', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Default Gamelike Display for Headings */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Orbitron', 'Chakra Petch', 'Rajdhani', sans-serif;
+  letter-spacing: 0.035em;
+}
+
+/* Custom Game Font Presets */
+body[data-game-font="tactical"] {
+  font-family: 'Chakra Petch', 'Rajdhani', sans-serif;
+}
+body[data-game-font="tactical"] h1,
+body[data-game-font="tactical"] h2,
+body[data-game-font="tactical"] h3,
+body[data-game-font="tactical"] h4,
+body[data-game-font="tactical"] h5,
+body[data-game-font="tactical"] h6 {
+  font-family: 'Chakra Petch', 'Orbitron', sans-serif;
+  letter-spacing: 0.04em;
+}
+
+body[data-game-font="arcade"] {
+  font-family: 'Rajdhani', monospace, sans-serif;
+}
+body[data-game-font="arcade"] h1,
+body[data-game-font="arcade"] h2,
+body[data-game-font="arcade"] h3,
+body[data-game-font="arcade"] h4 {
+  font-family: 'Press Start 2P', 'Silkscreen', monospace;
+  letter-spacing: 0.04em;
+}
+
+body[data-game-font="orbitron"] {
+  font-family: 'Rajdhani', sans-serif;
+}
+body[data-game-font="orbitron"] h1,
+body[data-game-font="orbitron"] h2,
+body[data-game-font="orbitron"] h3,
+body[data-game-font="orbitron"] h4 {
+  font-family: 'Orbitron', sans-serif;
+  letter-spacing: 0.06em;
+}
+
+/* Gamelike Typography Utilities */
+.font-game {
+  font-family: 'Rajdhani', 'Chakra Petch', sans-serif;
+}
+
+.font-display,
+.font-orbitron {
+  font-family: 'Orbitron', 'Chakra Petch', sans-serif;
+}
+
+.font-tactical,
+.font-chakra {
+  font-family: 'Chakra Petch', 'Rajdhani', sans-serif;
+}
+
+.font-pixel,
+.font-silkscreen {
+  font-family: 'Silkscreen', monospace;
+}
+
+.font-arcade {
+  font-family: 'Press Start 2P', 'Silkscreen', monospace;
+}
+
+/* Game HUD & Stat helpers */
+.game-chip {
+  font-family: 'Orbitron', sans-serif;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.game-score-counter {
+  font-family: 'Orbitron', monospace, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.game-tag-pixel {
+  font-family: 'Silkscreen', monospace;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+/* Touch targets: 44px minimum for primary mobile controls */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Accessible focus visible outlines */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 @layer utilities {
   .leaflet-container {
     width: 100%;
     height: 100%;
     z-index: 10;
+    font-family: inherit;
   }
 }
 
@@ -26,4 +165,14 @@
 
 .hotspot-radar-pulse {
   animation: pulse-ring 2.5s infinite ease-in-out;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
